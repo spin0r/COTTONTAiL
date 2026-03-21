@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NZB Upload</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="account-bar" id="account-bar">
+        <span class="account-loading">Loading account...</span>
+      </div>
+
+      <div class="upload-panel">
+        <div class="drop-zone" id="drop-zone">
+          <input type="file" id="file-input" accept=".nzb" multiple />
+          <span class="drop-icon">☁️</span>
+          <div class="drop-text">
+            Drop your <strong>.nzb</strong> files here<br />
+            or click to browse (multi-select)
+          </div>
+        </div>
+
+        <div class="file-list" id="file-list"></div>
+
+        <div class="progress-wrap" id="progress-wrap">
+          <div class="progress-bar">
+            <div class="fill" id="progress-fill"></div>
+          </div>
+          <div class="progress-pct" id="progress-pct">0%</div>
+        </div>
+
+        <button class="upload-btn" id="upload-btn">Upload</button>
+
+        <div class="status" id="status"></div>
+
+        <div class="reset-link" id="reset-link">
+          <a onclick="resetForm()">Upload another file</a>
+        </div>
+      </div>
+
+      <div class="section-title">
+        <span>Files in Drive</span>
+        <div class="section-actions">
+          <button
+            class="magic-all-btn"
+            id="magic-all-btn"
+            onclick="uploadAllToMagic()"
+          >
+            ⬆️ Upload All to MagicNZB
+          </button>
+          <button class="clear-all-btn" onclick="confirmClearAll()">
+            Clear All
+          </button>
+        </div>
+      </div>
+      <div class="drive-files" id="drive-files">
+        <!-- Files loaded dynamically -->
+      </div>
+    </div>
+
+    <!-- Custom Modal -->
+    <div class="modal-overlay" id="confirm-modal">
+      <div class="modal">
+        <h2 id="modal-title">Are you sure?</h2>
+        <p id="modal-desc">This action cannot be undone.</p>
+
+        <label class="modal-checkbox">
+          <input type="checkbox" id="modal-remember" />
+          Remember my choice
+        </label>
+
+        <div class="modal-actions">
+          <button class="modal-btn cancel" onclick="closeModal()">
+            Cancel
+          </button>
+          <button class="modal-btn confirm" id="modal-confirm-btn">
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,609 @@
+/* === Reset === */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* === Account Bar === */
+.account-bar {
+  background: #12121c;
+  border: 1px solid #2a2a3a;
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin-bottom: 20px;
+  font-size: 0.82rem;
+  color: #888;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.account-bar .account-label {
+  color: #4ade80;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.account-bar .account-label::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  background: #4ade80;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.account-bar .account-detail {
+  color: #b0b0c0;
+}
+
+.account-bar .account-sep {
+  color: #3a3a4a;
+}
+
+.account-bar.error {
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #f87171;
+}
+
+.account-loading {
+  color: #666;
+  font-style: italic;
+}
+
+body {
+  font-family:
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background: #0a0a0f;
+  color: #e0e0e6;
+  height: 100vh;
+  overflow: hidden;
+  padding: 24px 40px;
+  display: flex;
+  flex-direction: column;
+}
+
+.container {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+h1 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 24px;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+h1 span {
+  color: #7c6aef;
+}
+
+/* === Upload Panel === */
+.upload-panel {
+  flex-shrink: 0;
+  overflow-y: auto;
+  max-height: 55vh;
+}
+
+/* === Drop Zone === */
+.drop-zone {
+  border: 2px dashed #2a2a3a;
+  border-radius: 16px;
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  background: #12121c;
+  position: relative;
+}
+
+.drop-zone:hover,
+.drop-zone.drag-over {
+  border-color: #7c6aef;
+  background: #16162a;
+}
+
+.drop-zone.drag-over {
+  transform: scale(1.02);
+}
+
+.drop-icon {
+  font-size: 2.4rem;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.drop-text {
+  font-size: 0.95rem;
+  color: #888;
+  line-height: 1.6;
+}
+
+.drop-text strong {
+  color: #7c6aef;
+}
+
+#file-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* === File List === */
+.file-list {
+  display: none;
+  margin-top: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.file-list.visible {
+  display: block;
+}
+
+.file-item {
+  padding: 10px 14px;
+  background: #16162a;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #b0b0c0;
+  word-break: break-all;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.file-item .fname {
+  flex: 1;
+}
+
+.file-item .fsize {
+  color: #666;
+  white-space: nowrap;
+}
+
+.file-item .fstatus {
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.file-item.uploading {
+  border-left: 3px solid #7c6aef;
+}
+
+.file-item.done {
+  border-left: 3px solid #4ade80;
+  opacity: 0.7;
+}
+
+.file-item.failed {
+  border-left: 3px solid #f87171;
+}
+
+/* === Progress === */
+.progress-wrap {
+  display: none;
+  margin-top: 16px;
+}
+
+.progress-wrap.visible {
+  display: block;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: #1e1e2e;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar .fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #7c6aef, #a78bfa);
+  border-radius: 3px;
+  transition: width 0.15s ease;
+}
+
+.progress-pct {
+  text-align: right;
+  font-size: 0.75rem;
+  color: #666;
+  margin-top: 4px;
+}
+
+/* === Upload Button === */
+.upload-btn {
+  display: none;
+  width: 100%;
+  margin-top: 20px;
+  padding: 14px;
+  background: linear-gradient(135deg, #7c6aef, #6c5ce7);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.01em;
+}
+
+.upload-btn.visible {
+  display: block;
+}
+
+.upload-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(124, 106, 239, 0.3);
+}
+
+.upload-btn:active {
+  transform: translateY(0);
+}
+
+.upload-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* === Status Messages === */
+.status {
+  display: none;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+.status.visible {
+  display: block;
+}
+
+.status.success {
+  background: #0d2818;
+  color: #4ade80;
+  border: 1px solid #166534;
+}
+
+.status.error {
+  background: #2a0f0f;
+  color: #f87171;
+  border: 1px solid #7f1d1d;
+}
+
+/* === Reset Link === */
+.reset-link {
+  display: none;
+  text-align: center;
+  margin-top: 14px;
+}
+
+.reset-link.visible {
+  display: block;
+}
+
+.reset-link a {
+  color: #7c6aef;
+  text-decoration: none;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.reset-link a:hover {
+  text-decoration: underline;
+}
+
+/* === Drive Files Section === */
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 16px 0 12px;
+  color: #fff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.section-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.clear-all-btn {
+  background: rgba(248, 113, 113, 0.1);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-all-btn:hover {
+  background: rgba(248, 113, 113, 0.2);
+}
+
+.drive-files {
+  background: #12121c;
+  border-radius: 12px;
+  padding: 16px;
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid #2a2a3a;
+  min-height: 0;
+}
+
+.drive-files:empty::after {
+  content: "No files found in drive.";
+  color: #666;
+  font-size: 0.9rem;
+  display: block;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.drive-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: #16162a;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+  border: 1px solid transparent;
+}
+
+.drive-item:last-child {
+  margin-bottom: 0;
+}
+
+.drive-item .d-name {
+  flex: 1;
+  color: #e0e0e6;
+  word-break: break-all;
+  cursor: pointer;
+}
+
+.drive-item input.edit-input {
+  flex: 1;
+  background: #0a0a0f;
+  border: 1px solid #7c6aef;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.drive-item .d-size {
+  color: #666;
+  white-space: nowrap;
+}
+
+/* === Action Buttons === */
+.action-btn {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.action-btn.delete:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.action-btn.save:hover {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.1);
+}
+
+/* === Magic Upload Button (per file) === */
+.action-btn.magic {
+  font-size: 0.75rem;
+  padding: 3px 6px;
+  transition: all 0.25s ease;
+}
+
+.action-btn.magic:hover {
+  color: #a78bfa;
+  background: rgba(124, 106, 239, 0.15);
+}
+
+.action-btn.magic.uploading {
+  color: #7c6aef;
+  animation: pulse-magic 1s infinite;
+  pointer-events: none;
+}
+
+.action-btn.magic.done {
+  color: #4ade80;
+  pointer-events: none;
+}
+
+.action-btn.magic.failed {
+  color: #f87171;
+}
+
+@keyframes pulse-magic {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* === Batch Upload to MagicNZB === */
+.magic-all-btn {
+  background: linear-gradient(135deg, #7c6aef, #6c5ce7);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.magic-all-btn:hover {
+  box-shadow: 0 4px 16px rgba(124, 106, 239, 0.3);
+  transform: translateY(-1px);
+}
+
+.magic-all-btn:active {
+  transform: translateY(0);
+}
+
+.magic-all-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* === Modal === */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.modal-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal {
+  background: #16162a;
+  border: 1px solid #2a2a3a;
+  border-radius: 16px;
+  padding: 24px;
+  width: 90%;
+  max-width: 400px;
+  transform: translateY(20px);
+  transition: transform 0.2s ease;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modal-overlay.visible .modal {
+  transform: translateY(0);
+}
+
+.modal h2 {
+  font-size: 1.2rem;
+  margin-bottom: 12px;
+  color: #fff;
+}
+
+.modal p {
+  color: #b0b0c0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin-bottom: 20px;
+  word-wrap: break-word;
+  word-break: break-all;
+}
+
+.modal-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  font-size: 0.9rem;
+  color: #888;
+  cursor: pointer;
+}
+
+.modal-checkbox input {
+  cursor: pointer;
+  accent-color: #7c6aef;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.modal-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.modal-btn.cancel {
+  background: transparent;
+  color: #b0b0c0;
+  border: 1px solid #3a3a4a;
+}
+
+.modal-btn.cancel:hover {
+  background: #2a2a3a;
+  color: #fff;
+}
+
+.modal-btn.confirm {
+  background: #f87171;
+  color: #fff;
+}
+
+.modal-btn.confirm:hover {
+  background: #ef4444;
+}

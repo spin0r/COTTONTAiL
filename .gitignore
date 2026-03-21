@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Runtime data
+nzb_downloads/
+temp_zip_uploads/
+approved_users.json
+message_cleaner_state.json
+
+# Logs
+*.log
+logs/
+
+# Archives
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Python (legacy)
+__pycache__/
+*.pyc
+*.pyo

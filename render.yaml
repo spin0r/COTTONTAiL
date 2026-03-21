@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: magicnzb-bot
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node bot.js
+    healthCheckPath: /health
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: AUTHORIZED_USERS
+        sync: false
+      - key: TELEGRAPH_TOKEN
+        sync: false
+      - key: LOG_GROUP_ID
+        sync: false
+      - key: UPLOAD_PORT
+        value: 10000
+      - key: COOKIE_API_BASE
+        sync: false
+      - key: COOKIE_API_SECRET
+        sync: false
