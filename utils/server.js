@@ -117,26 +117,7 @@ async function startWebServer(bot) {
       const filename = req.file.filename;
       const size = req.file.size;
 
-      // Send to Telegram log channel
-      if (_bot) {
-        try {
-          const { LOG_GROUP_ID } = require("./helpers");
-          if (LOG_GROUP_ID) {
-            const { InputFile } = require("grammy");
-            const fileContent = fs.readFileSync(req.file.path);
-            await _bot.api.sendDocument(
-              LOG_GROUP_ID,
-              new InputFile(fileContent, filename),
-              {
-                caption: `<code>${filename}</code>`,
-                parse_mode: "HTML",
-              },
-            );
-          }
-        } catch (e) {
-          console.error("Failed to send to log channel:", e.message);
-        }
-      }
+      // Send to Telegram log channel logic moved to MagicNZB upload per user request
 
       res.json({
         message: `Uploaded ${filename} (${size} bytes)`,
@@ -249,6 +230,26 @@ async function startWebServer(bot) {
       const result = await client.uploadNzb(fileContent, filename);
 
       if (result?.status === "success") {
+        // Send to Telegram log channel
+        if (_bot) {
+          try {
+            const { LOG_GROUP_ID } = require("./helpers");
+            if (LOG_GROUP_ID) {
+              const { InputFile } = require("grammy");
+              await _bot.api.sendDocument(
+                LOG_GROUP_ID,
+                new InputFile(fileContent, filename),
+                {
+                  caption: `<code>${filename}</code>`,
+                  parse_mode: "HTML",
+                },
+              );
+            }
+          } catch (e) {
+            console.error("Failed to send to log channel:", e.message);
+          }
+        }
+
         res.json({
           status: "success",
           message: `Uploaded ${filename} to MagicNZB`,
