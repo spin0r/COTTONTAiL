@@ -6,7 +6,7 @@ const MagicClient = require("../client");
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-let BOT_VERSION = "v6.1: Cotton";
+let BOT_VERSION = "v7.0: Cotton";
 let VERSION_IMAGE_URL = "";
 
 const SIZE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"];

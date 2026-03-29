@@ -16,6 +16,19 @@ const magicAllBtn = document.getElementById("magic-all-btn");
 let selectedFiles = [];
 let modalCallback = null;
 
+const ICONS = {
+  wait: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+  upload: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
+  success: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+  error: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+  edit: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+  trash: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
+  save: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
+  cookie: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M7 10h.01"/><path d="M10 14h.01"/><path d="M15 13h.01"/><path d="M12 7h.01"/></svg>',
+  time: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+  warning: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+};
+
 // === Paste Handler ===
 window.addEventListener("paste", (e) => {
   const items = (e.clipboardData || e.originalEvent.clipboardData).items;
@@ -67,14 +80,14 @@ async function loadAccountInfo() {
     const res = await fetch("/health");
     const data = await res.json();
     if (res.ok && data.status === "ok") {
-      bar.innerHTML = `<span class="account-label">@${data.bot}</span><span class="account-sep">•</span><span class="account-detail">🍪 ${data.profile}${data.email ? ` (${data.email})` : ""}</span><span class="account-sep">•</span><span class="account-detail">⏱ ${data.uptime}</span>`;
+      bar.innerHTML = `<span class="account-label">@${data.bot}</span><span class="account-sep">•</span><span class="account-detail" style="display:inline-flex;align-items:center;gap:4px;">${ICONS.cookie} ${data.profile}${data.email ? ` (${data.email})` : ""}</span><span class="account-sep">•</span><span class="account-detail" style="display:inline-flex;align-items:center;gap:4px;">${ICONS.time} ${data.uptime}</span>`;
       bar.classList.remove("error");
     } else {
-      bar.innerHTML = '<span style="color:#f87171">⚠ Bot offline</span>';
+      bar.innerHTML = `<span style="color:#f87171;display:inline-flex;align-items:center;gap:4px;">${ICONS.warning} Bot offline</span>`;
       bar.classList.add("error");
     }
   } catch (err) {
-    bar.innerHTML = '<span style="color:#f87171">⚠ Could not connect</span>';
+    bar.innerHTML = `<span style="color:#f87171;display:inline-flex;align-items:center;gap:4px;">${ICONS.warning} Could not connect</span>`;
     bar.classList.add("error");
   }
 }
@@ -91,10 +104,21 @@ function handleFiles(files) {
       continue;
     }
     selectedFiles.push(file);
+    const idx = selectedFiles.length;
     const item = document.createElement("div");
     item.className = "file-item";
-    item.id = "fi-" + selectedFiles.length;
-    item.innerHTML = `<span class="fname">${file.name}</span><span class="fsize">${formatSize(file.size)}</span><span class="fstatus" id="fs-${selectedFiles.length}">⏳</span>`;
+    item.id = "fi-" + idx;
+    item.innerHTML = `
+      <div class="f-info">
+        <span class="fname">${file.name}</span>
+        <span class="fsize">${formatSize(file.size)}</span>
+        <span class="fstatus" id="fs-${idx}">${ICONS.wait}</span>
+      </div>
+      <div class="f-progress-wrap" id="fpw-${idx}">
+        <div class="f-progress-bar"><div class="f-fill" id="ffill-${idx}"></div></div>
+        <div class="f-text" id="ftext-${idx}">Waiting...</div>
+      </div>
+    `;
     fileList.appendChild(item);
   }
 
@@ -131,21 +155,21 @@ uploadBtn.addEventListener("click", async () => {
     const fstat = document.getElementById("fs-" + idx);
 
     if (item) item.className = "file-item uploading";
-    if (fstat) fstat.textContent = "⏫";
+    if (fstat) fstat.innerHTML = ICONS.upload;
 
     const overallPct = Math.round((i / selectedFiles.length) * 100);
     progressFill.style.width = overallPct + "%";
     progressPct.textContent = `${i + 1}/${selectedFiles.length}`;
 
     try {
-      await uploadSingleFile(file);
+      await uploadSingleFile(file, idx);
       success++;
       if (item) item.className = "file-item done";
-      if (fstat) fstat.textContent = "✅";
+      if (fstat) fstat.innerHTML = ICONS.success;
     } catch (err) {
       failed++;
       if (item) item.className = "file-item failed";
-      if (fstat) fstat.textContent = "❌";
+      if (fstat) fstat.innerHTML = ICONS.error;
     }
   }
 
@@ -153,7 +177,7 @@ uploadBtn.addEventListener("click", async () => {
   progressPct.textContent = `${selectedFiles.length}/${selectedFiles.length}`;
 
   if (failed === 0) {
-    showStatus(`✅ All ${success} file(s) uploaded!`, "success");
+    showStatus(`All ${success} file(s) uploaded!`, "success");
     setTimeout(() => {
       fileList.innerHTML = "";
       fileList.classList.remove("visible");
@@ -176,11 +200,26 @@ uploadBtn.addEventListener("click", async () => {
   resetLink.classList.add("visible");
 });
 
-function uploadSingleFile(file) {
+function uploadSingleFile(file, idx) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
     formData.append("file", file);
+
+    const fWrap = document.getElementById("fpw-" + idx);
+    const fFill = document.getElementById("ffill-" + idx);
+    const fText = document.getElementById("ftext-" + idx);
+    
+    if (fWrap) fWrap.style.display = "block";
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable && fFill && fText) {
+        let pct = 0;
+        if (e.total > 0) pct = Math.round((e.loaded / e.total) * 100);
+        fFill.style.width = pct + "%";
+        fText.textContent = `${pct}% (${formatSize(e.loaded)} / ${formatSize(e.total)})`;
+      }
+    });
 
     xhr.addEventListener("load", () => {
       if (xhr.status === 200) resolve();
@@ -239,9 +278,9 @@ function renderDriveFiles(files) {
     item.innerHTML = `
             <div class="d-name" title="${f.name}">${f.name}</div>
             <div class="d-size">${formatSize(f.size)}</div>
-            <button class="action-btn magic" title="Upload to MagicNZB" data-filename="${f.name}" onclick="uploadToMagic('${f.name.replace(/'/g, "\\'")}', this)">⬆️</button>
-            <button class="action-btn" title="Edit" onclick="startEdit(this, '${f.name.replace(/'/g, "\\'")}')">✏️</button>
-            <button class="action-btn delete" title="Delete" onclick="confirmDelete('${f.name.replace(/'/g, "\\'")}')">🗑️</button>
+            <button class="action-btn magic" title="Upload to MagicNZB" data-filename="${f.name}" onclick="uploadToMagic('${f.name.replace(/'/g, "\\'")}', this)">${ICONS.upload}</button>
+            <button class="action-btn" title="Edit" onclick="startEdit(this, '${f.name.replace(/'/g, "\\'")}')">${ICONS.edit}</button>
+            <button class="action-btn delete" title="Delete" onclick="confirmDelete('${f.name.replace(/'/g, "\\'")}')">${ICONS.trash}</button>
         `;
     item.dataset.filename = f.name;
     driveFiles.appendChild(item);
@@ -258,7 +297,7 @@ function startEdit(btn, oldName) {
   const input = item.querySelector(".edit-input");
   input.focus();
 
-  btn.outerHTML = `<button class="action-btn save" title="Save" onclick="saveEdit(this, '${oldName.replace(/'/g, "\\'")}')">💾</button>`;
+  btn.outerHTML = `<button class="action-btn save" title="Save" onclick="saveEdit(this, '${oldName.replace(/'/g, "\\'")}')">${ICONS.save}</button>`;
 
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") item.querySelector(".save").click();
@@ -322,7 +361,7 @@ async function uploadToMagic(filename, btn) {
     return;
 
   btn.classList.add("uploading");
-  btn.textContent = "⏳";
+  btn.innerHTML = ICONS.wait;
 
   try {
     const res = await fetch(
@@ -334,17 +373,17 @@ async function uploadToMagic(filename, btn) {
     if (res.ok && data.status === "success") {
       btn.classList.remove("uploading");
       btn.classList.add("done");
-      btn.textContent = "✅";
+      btn.innerHTML = ICONS.success;
     } else {
       btn.classList.remove("uploading");
       btn.classList.add("failed");
-      btn.textContent = "❌";
+      btn.innerHTML = ICONS.error;
       btn.title = data.error || "Upload failed";
     }
   } catch (err) {
     btn.classList.remove("uploading");
     btn.classList.add("failed");
-    btn.textContent = "❌";
+    btn.innerHTML = ICONS.error;
     btn.title = "Network error";
   }
 }
@@ -355,7 +394,7 @@ async function uploadAllToMagic() {
   if (items.length === 0) return;
 
   magicAllBtn.disabled = true;
-  magicAllBtn.textContent = "Uploading...";
+  magicAllBtn.innerHTML = `${ICONS.wait} <span style="margin-left:4px">Uploading...</span>`;
 
   let success = 0,
     failed = 0;
@@ -376,15 +415,17 @@ async function uploadAllToMagic() {
   }
 
   magicAllBtn.disabled = false;
+  const magicHtml = `${ICONS.upload} <span style="margin-left:4px">Upload All</span>`;
+  
   if (failed === 0) {
-    magicAllBtn.textContent = `✅ All ${success} uploaded!`;
+    magicAllBtn.innerHTML = `${ICONS.success} <span style="margin-left:4px">All ${success} uploaded!</span>`;
     setTimeout(() => {
-      magicAllBtn.textContent = "⬆️ Upload All to MagicNZB";
+      magicAllBtn.innerHTML = magicHtml;
     }, 3000);
   } else {
-    magicAllBtn.textContent = `${success} ok, ${failed} failed`;
+    magicAllBtn.innerHTML = `${ICONS.error} <span style="margin-left:4px">${success} ok, ${failed} failed</span>`;
     setTimeout(() => {
-      magicAllBtn.textContent = "⬆️ Upload All to MagicNZB";
+      magicAllBtn.innerHTML = magicHtml;
     }, 3000);
   }
 }
@@ -435,4 +476,35 @@ function confirmClearAll() {
     `Are you sure you want to delete all ${count} files in the drive?`,
     () => doClearAll(),
   );
+}
+
+// === Resizer Logic ===
+const resizer = document.getElementById("resizer");
+const sidebar = document.querySelector(".sidebar");
+let isDraggingResizer = false;
+
+if (resizer && sidebar) {
+  resizer.addEventListener("mousedown", (e) => {
+    isDraggingResizer = true;
+    resizer.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!isDraggingResizer) return;
+    let newWidth = e.clientX;
+    if (newWidth < 250) newWidth = 250;
+    if (newWidth > window.innerWidth - 300) newWidth = window.innerWidth - 300;
+    sidebar.style.width = newWidth + "px";
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (isDraggingResizer) {
+      isDraggingResizer = false;
+      resizer.classList.remove("dragging");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+  });
 }

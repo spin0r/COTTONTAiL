@@ -8,57 +8,72 @@
   </head>
 
   <body>
-    <div class="container">
-      <div class="account-bar" id="account-bar">
-        <span class="account-loading">Loading account...</span>
-      </div>
+    <div class="layout-wrapper">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h1>NZB<span>Upload</span></h1>
+        </div>
+        
+        <div class="account-bar" id="account-bar">
+          <span class="account-loading">Loading account...</span>
+        </div>
 
-      <div class="upload-panel">
-        <div class="drop-zone" id="drop-zone">
-          <input type="file" id="file-input" accept=".nzb" multiple />
-          <span class="drop-icon">☁️</span>
-          <div class="drop-text">
-            Drop your <strong>.nzb</strong> files here<br />
-            or click to browse (multi-select)
+        <div class="upload-panel">
+          <div class="drop-zone" id="drop-zone">
+            <input type="file" id="file-input" accept=".nzb" multiple />
+            <svg class="drop-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <div class="drop-text">
+              Drop <strong>.nzb</strong> files here<br />
+              or click to browse
+            </div>
+          </div>
+
+          <div class="file-list" id="file-list"></div>
+
+          <div class="progress-wrap" id="progress-wrap">
+            <div class="progress-bar">
+              <div class="fill" id="progress-fill"></div>
+            </div>
+            <div class="progress-pct" id="progress-pct">0%</div>
+          </div>
+
+          <button class="upload-btn" id="upload-btn">Upload Selected</button>
+
+          <div class="status" id="status"></div>
+
+          <div class="reset-link" id="reset-link">
+            <a onclick="resetForm()">Upload another file</a>
           </div>
         </div>
+      </aside>
 
-        <div class="file-list" id="file-list"></div>
+      <div class="resizer" id="resizer"></div>
 
-        <div class="progress-wrap" id="progress-wrap">
-          <div class="progress-bar">
-            <div class="fill" id="progress-fill"></div>
+      <main class="main-content">
+        <header class="content-header">
+          <h2>Files in Drive</h2>
+          <div class="section-actions">
+            <button class="magic-all-btn" id="magic-all-btn" onclick="uploadAllToMagic()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              Upload All
+            </button>
+            <button class="clear-all-btn" onclick="confirmClearAll()">
+               Clear All
+            </button>
           </div>
-          <div class="progress-pct" id="progress-pct">0%</div>
+        </header>
+        <div class="drive-files" id="drive-files">
+          <!-- Files loaded dynamically -->
         </div>
-
-        <button class="upload-btn" id="upload-btn">Upload</button>
-
-        <div class="status" id="status"></div>
-
-        <div class="reset-link" id="reset-link">
-          <a onclick="resetForm()">Upload another file</a>
-        </div>
-      </div>
-
-      <div class="section-title">
-        <span>Files in Drive</span>
-        <div class="section-actions">
-          <button
-            class="magic-all-btn"
-            id="magic-all-btn"
-            onclick="uploadAllToMagic()"
-          >
-            ⬆️ Upload All to MagicNZB
-          </button>
-          <button class="clear-all-btn" onclick="confirmClearAll()">
-            Clear All
-          </button>
-        </div>
-      </div>
-      <div class="drive-files" id="drive-files">
-        <!-- Files loaded dynamically -->
-      </div>
+      </main>
     </div>
 
     <!-- Custom Modal -->
@@ -73,12 +88,8 @@
         </label>
 
         <div class="modal-actions">
-          <button class="modal-btn cancel" onclick="closeModal()">
-            Cancel
-          </button>
-          <button class="modal-btn confirm" id="modal-confirm-btn">
-            Confirm
-          </button>
+          <button class="modal-btn cancel" onclick="closeModal()">Cancel</button>
+          <button class="modal-btn confirm" id="modal-confirm-btn">Confirm</button>
         </div>
       </div>
     </div>
