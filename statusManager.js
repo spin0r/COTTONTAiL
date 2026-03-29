@@ -239,19 +239,15 @@ const StatusManager = {
   async startOrUpdate(bot, userId, chatId, messageIdToEdit = null) {
     if (_instances[userId]) {
       const existing = _instances[userId];
-      if (messageIdToEdit && existing.messageId !== messageIdToEdit) {
+      if (existing.messageId && existing.messageId !== messageIdToEdit) {
         try {
-          await bot.api.deleteMessage(chatId, messageIdToEdit);
+          await bot.api.deleteMessage(existing.chatId || chatId, existing.messageId);
         } catch (_) {}
-        return;
       }
-      if (!messageIdToEdit) {
-        try {
-          if (existing.messageId)
-            await bot.api.deleteMessage(chatId, existing.messageId);
-        } catch (_) {}
-        existing.messageId = null;
-      }
+      existing.chatId = chatId;
+      existing.messageId = messageIdToEdit;
+      
+      StatusManager._tick(bot, userId).catch(console.error);
       return;
     }
 
@@ -331,10 +327,10 @@ const StatusManager = {
         delete _instances[userId];
         try {
           await bot.api.editMessageText(
+            inst.chatId,
+            inst.messageId,
             "All transfers finished. Monitor stopped.",
             {
-              chat_id: inst.chatId,
-              message_id: inst.messageId,
               reply_markup: {
                 inline_keyboard: [
                   [{ text: "⟳", callback_data: "list_refresh_1" }],
@@ -348,9 +344,7 @@ const StatusManager = {
 
       if (msg !== inst._lastText) {
         try {
-          await bot.api.editMessageText(msg, {
-            chat_id: inst.chatId,
-            message_id: inst.messageId,
+          await bot.api.editMessageText(inst.chatId, inst.messageId, msg, {
             reply_markup: markup,
             parse_mode: "HTML",
           });
