@@ -192,6 +192,39 @@ async function startWebServer(bot) {
     }
   });
 
+  // Smart rename
+  app.post("/smart-rename/:filename", (req, res) => {
+    const filename = path.basename(req.params.filename);
+    const oldPath = path.join(DOWNLOAD_DIR, filename);
+    if (!fs.existsSync(oldPath)) return res.status(404).json({ error: "File not found" });
+
+    const baseName = filename.replace(/\.nzb$/i, "");
+    
+    let newName = baseName
+      .replace(/[\.\-\s]?\b(XXX|1080p?|2160p?|720p?|480p?|360p?|4K|8K|HD|FHD|UHD|MP4|MKV|AVI|WRB|WEBRip|WEB-DL|WEB|HDRip|BluRay|BRRip|BDRip|xVid|DivX|H\.?264|H\.?265|x\.?264|x\.?265|HEVC)\b/gi, "")
+      .replace(/\.{2,}/g, ".")
+      .replace(/[\.\-\s]+$/, "")
+      .trim();
+    
+    newName = newName + ".nzb";
+    
+    if (newName === filename) {
+       return res.json({ message: "No tags found to strip", new_name: filename });
+    }
+
+    const newPath = path.join(DOWNLOAD_DIR, newName);
+    if (fs.existsSync(newPath) && newPath.toLowerCase() !== oldPath.toLowerCase()) {
+      return res.status(409).json({ error: "File with the cleaned name already exists" });
+    }
+
+    try {
+      fs.renameSync(oldPath, newPath);
+      res.json({ message: `Smart renamed to ${newName}`, new_name: newName });
+    } catch (e) {
+      res.status(500).json({ error: `Failed to smart rename: ${e.message}` });
+    }
+  });
+
   // Clear all files
   app.delete("/files", (req, res) => {
     if (!fs.existsSync(DOWNLOAD_DIR))

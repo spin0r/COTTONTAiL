@@ -26,7 +26,8 @@ const ICONS = {
   save: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
   cookie: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M7 10h.01"/><path d="M10 14h.01"/><path d="M15 13h.01"/><path d="M12 7h.01"/></svg>',
   time: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
-  warning: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+  warning: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  smart: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 22l6.5-6.5"/><path d="M13.5 10.5l-3-3"/><path d="M14 6l4-4 4 4-4 4"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
 };
 
 // === Paste Handler ===
@@ -273,12 +274,14 @@ async function loadDriveFiles() {
 function renderDriveFiles(files) {
   driveFiles.innerHTML = "";
   files.forEach((f) => {
+    const isRecent = (Date.now() / 1000 - f.mtime) < 3600;
     const item = document.createElement("div");
-    item.className = "drive-item";
+    item.className = `drive-item ${isRecent ? "recent" : ""}`;
     item.innerHTML = `
             <div class="d-name" title="${f.name}">${f.name}</div>
             <div class="d-size">${formatSize(f.size)}</div>
             <button class="action-btn magic" title="Upload to MagicNZB" data-filename="${f.name}" onclick="uploadToMagic('${f.name.replace(/'/g, "\\'")}', this)">${ICONS.upload}</button>
+            <button class="action-btn" title="Smart Rename" onclick="smartRename(this, '${f.name.replace(/'/g, "\\'")}')">${ICONS.smart}</button>
             <button class="action-btn" title="Edit" onclick="startEdit(this, '${f.name.replace(/'/g, "\\'")}')">${ICONS.edit}</button>
             <button class="action-btn delete" title="Delete" onclick="confirmDelete('${f.name.replace(/'/g, "\\'")}')">${ICONS.trash}</button>
         `;
@@ -352,6 +355,31 @@ async function doClearAll() {
     if (res.ok) loadDriveFiles();
   } catch (err) {
     console.error(err);
+  }
+}
+
+async function smartRename(btn, filename) {
+  if (btn.classList.contains("uploading")) return;
+  btn.classList.add("uploading");
+  const oldIcon = btn.innerHTML;
+  btn.innerHTML = ICONS.wait;
+
+  try {
+    const res = await fetch(`/smart-rename/${encodeURIComponent(filename)}`, { method: "POST" });
+    const data = await res.json();
+
+    if (res.ok) {
+      loadDriveFiles();
+    } else {
+      alert(data.error || "Failed to smart rename");
+      btn.classList.remove("uploading");
+      btn.innerHTML = oldIcon;
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Network error");
+    btn.classList.remove("uploading");
+    btn.innerHTML = oldIcon;
   }
 }
 
