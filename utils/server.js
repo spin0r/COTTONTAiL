@@ -269,7 +269,7 @@ async function startWebServer(bot) {
             const { LOG_GROUP_ID } = require("./helpers");
             if (LOG_GROUP_ID) {
               const { InputFile } = require("grammy");
-              await _bot.api.sendDocument(
+              const logMsg = await _bot.api.sendDocument(
                 LOG_GROUP_ID,
                 new InputFile(fileContent, filename),
                 {
@@ -277,6 +277,21 @@ async function startWebServer(bot) {
                   parse_mode: "HTML",
                 },
               );
+
+              // Index in NZB database so /logs search can find it
+              try {
+                const nzbDb = require("../nzb/db");
+                const { extractKeywords } = require("../nzb/utils");
+                nzbDb.insertFile({
+                  msg_id: logMsg.message_id,
+                  file_name: filename,
+                  caption: filename,
+                  keywords: extractKeywords(filename, filename),
+                  file_type: "nzb",
+                });
+              } catch (dbErr) {
+                console.error("[NZB] DB index error (web):", dbErr.message);
+              }
             }
           } catch (e) {
             console.error("Failed to send to log channel:", e.message);
