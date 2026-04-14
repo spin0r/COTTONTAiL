@@ -13,6 +13,7 @@ const {
   VERSION_IMAGE_URL,
 } = require("../utils/helpers");
 const TelegraphClient = require("../telegraphClient");
+const { runBackup, restoreFromDropbox, getBackupInfo, isConfigured: isDropboxConfigured } = require("../nzb/backup");
 
 const start = restricted(async (ctx) => {
   await ctx.reply(
@@ -372,6 +373,78 @@ const renewCommand = restricted(async (ctx) => {
   );
 });
 
+const backupCommand = restricted(async (ctx) => {
+  if (!isDropboxConfigured()) {
+    await ctx.reply("❌ Dropbox backup not configured. Set DROPBOX_REFRESH_TOKEN, DROPBOX_APP_KEY, DROPBOX_APP_SECRET in .env");
+    return;
+  }
+
+  const msg = await ctx.reply("☁️ Running backup to Dropbox...");
+  try {
+    await runBackup();
+    const info = await getBackupInfo();
+    const text = info
+      ? `✅ Backup complete\n\n📁 ${info.path}\n📦 ${info.sizeMB} MB\n🕒 ${info.modified}\n🔖 rev: <code>${info.rev}</code>`
+      : "✅ Backup complete";
+    await ctx.api.editMessageText(ctx.chat.id, msg.message_id, text, { parse_mode: "HTML" });
+  } catch (e) {
+    await ctx.api.editMessageText(ctx.chat.id, msg.message_id, `❌ Backup failed: ${e.message}`);
+  }
+});
+
+const restoreCommand = restricted(async (ctx) => {
+  if (!isDropboxConfigured()) {
+    await ctx.reply("❌ Dropbox backup not configured.");
+    return;
+  }
+
+  const msg = await ctx.reply("⬇️ Restoring database from Dropbox...");
+  try {
+    const nzbDb = require("../nzb/db");
+    nzbDb.close();
+    const result = await restoreFromDropbox();
+    if (result) {
+      nzbDb.init();
+      const count = nzbDb.getCount();
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        msg.message_id,
+        `✅ Database restored from Dropbox\n📊 ${count} files indexed`,
+      );
+    } else {
+      nzbDb.init();
+      await ctx.api.editMessageText(ctx.chat.id, msg.message_id, "⚠️ No backup found on Dropbox.");
+    }
+  } catch (e) {
+    try { require("../nzb/db").init(); } catch (_) {}
+    await ctx.api.editMessageText(ctx.chat.id, msg.message_id, `❌ Restore failed: ${e.message}`);
+  }
+});
+
+const backupInfoCommand = restricted(async (ctx) => {
+  if (!isDropboxConfigured()) {
+    await ctx.reply("❌ Dropbox backup not configured.");
+    return;
+  }
+
+  const msg = await ctx.reply("📡 Fetching backup info...");
+  try {
+    const info = await getBackupInfo();
+    if (info) {
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        msg.message_id,
+        `☁️ <b>Dropbox Backup Info</b>\n\n📁 ${info.path}\n📦 ${info.sizeMB} MB\n🕒 ${info.modified}\n🔖 rev: <code>${info.rev}</code>`,
+        { parse_mode: "HTML" },
+      );
+    } else {
+      await ctx.api.editMessageText(ctx.chat.id, msg.message_id, "⚠️ No backup found on Dropbox.");
+    }
+  } catch (e) {
+    await ctx.api.editMessageText(ctx.chat.id, msg.message_id, `❌ Error: ${e.message}`);
+  }
+});
+
 module.exports = {
   start,
   login,
@@ -384,4 +457,7 @@ module.exports = {
   approvedCommand,
   tdelCommand,
   renewCommand,
+  backupCommand,
+  restoreCommand,
+  backupInfoCommand,
 };

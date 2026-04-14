@@ -21,3 +21,9 @@ services:
         sync: false
       - key: COOKIE_API_SECRET
         sync: false
+      - key: DROPBOX_REFRESH_TOKEN
+        sync: false
+      - key: DROPBOX_APP_KEY
+        sync: false
+      - key: DROPBOX_APP_SECRET
+        sync: false

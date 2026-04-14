@@ -111,7 +111,7 @@ const searchCommand = restricted(async (ctx) => {
     }
 
     const results = allItems.filter((item) =>
-      (item.name || "").toLowerCase().includes(query),
+      (item.name || "").toLowerCase().replace(/[._\-]/g, " ").includes(query),
     );
     if (!results.length) {
       await ctx.api.editMessageText(
@@ -495,7 +495,7 @@ const searchButtonHandler = restricted(async (ctx) => {
       }
     }
     const results = allItems.filter((item) =>
-      (item.name || "").toLowerCase().includes(searchQuery),
+      (item.name || "").toLowerCase().replace(/[._\-]/g, " ").includes(searchQuery),
     );
     if (!results.length) {
       await ctx.editMessageText(`No results found for '${searchQuery}'.`);
