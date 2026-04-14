@@ -187,6 +187,7 @@ async function restoreFromDropbox() {
         headers: {
           Authorization: `Bearer ${token}`,
           "Dropbox-API-Arg": apiArg,
+          "Content-Type": "application/octet-stream",
         },
         responseType: "arraybuffer",
         maxContentLength: 150 * 1024 * 1024,
