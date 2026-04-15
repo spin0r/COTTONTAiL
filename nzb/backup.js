@@ -34,9 +34,14 @@ const BACKUP_FILE = path.join(__dirname, "..", "nzb_index_backup.db");
 const DROPBOX_PATH = "/cottontail/nzb_index.db"; // path inside Dropbox
 
 let backupTimer = null;
+let dirtyTimer = null;
 let isBackingUp = false;
 let cachedAccessToken = null;
 let tokenExpiresAt = 0;
+let lastBackupAt = 0;
+
+const DIRTY_DEBOUNCE_MS = 30_000;        // 30s debounce for rapid inserts
+const MIN_BACKUP_INTERVAL = 2 * 60_000;  // 2 min cooldown between backups (Dropbox rate limits)
 
 // Track last known DB state for change detection
 let lastDbHash = null;
@@ -44,16 +49,19 @@ let lastDbHash = null;
 // ─── Change Detection ─────────────────────────────────────────────────────────
 
 /**
- * Compute a fast fingerprint of the DB file (size + mtime).
- * This avoids reading the entire file just to check for changes.
+ * Get a fingerprint that reliably detects DB changes even under WAL mode.
+ * Uses the row count from the live database, since WAL writes don't
+ * update the main .db file's size/mtime until a checkpoint.
  *
- * @returns {string|null} - Fingerprint string, or null if file doesn't exist
+ * @returns {string|null} - Fingerprint string, or null if DB not ready
  */
 function getDbFingerprint() {
-  const dbPath = db.getDbPath();
   try {
+    const count = db.getCount();
+    const dbPath = db.getDbPath();
     const stat = fs.statSync(dbPath);
-    return `${stat.size}:${stat.mtimeMs}`;
+    // Combine row count with file size for robust detection
+    return `${count}:${stat.size}`;
   } catch (_) {
     return null;
   }
@@ -248,12 +256,23 @@ async function getBackupInfo() {
 
 /**
  * Run the full backup cycle: create local backup → push to Dropbox.
- * Called manually via /backup command — always forces upload.
+ *
+ * @param {boolean} [force=false] - If true, bypass cooldown (e.g. /backup command)
  */
-async function runBackup() {
+async function runBackup(force = false) {
   if (isBackingUp) {
     console.log("[NZB-BACKUP] Backup already in progress, skipping.");
     return;
+  }
+
+  // Respect cooldown unless forced (manual /backup command)
+  if (!force) {
+    const elapsed = Date.now() - lastBackupAt;
+    if (elapsed < MIN_BACKUP_INTERVAL) {
+      const waitSec = Math.ceil((MIN_BACKUP_INTERVAL - elapsed) / 1000);
+      console.log(`[NZB-BACKUP] Cooldown active, next backup in ${waitSec}s`);
+      return;
+    }
   }
 
   isBackingUp = true;
@@ -261,8 +280,9 @@ async function runBackup() {
     const backupPath = await createBackup();
     await pushToDropbox(backupPath);
 
-    // Update fingerprint after successful push
+    // Update fingerprint + timestamp after successful push
     lastDbHash = getDbFingerprint();
+    lastBackupAt = Date.now();
 
     // Clean up local backup file after successful push
     try {
@@ -283,8 +303,10 @@ async function runBackup() {
 /**
  * Check for DB changes and back up only if something changed.
  * Called by the 5-minute interval timer.
+ * Skips if a dirty-flag sync is already pending (avoids double push).
  */
 async function checkAndBackup() {
+  if (dirtyTimer) return; // dirty sync will handle it
   if (!hasDbChanged()) return;
   console.log("[NZB-BACKUP] DB change detected, starting backup...");
   await runBackup();
@@ -375,6 +397,29 @@ function stopBackupScheduler() {
     backupTimer = null;
     console.log("[NZB-BACKUP] Scheduler stopped.");
   }
+  if (dirtyTimer) {
+    clearTimeout(dirtyTimer);
+    dirtyTimer = null;
+  }
+}
+
+/**
+ * Mark the DB as dirty after an index change.
+ * Triggers a debounced backup — waits 30s after the last call
+ * so rapid inserts (bulk upload) are batched into one push.
+ * Respects the 2-min cooldown to avoid hitting Dropbox rate limits.
+ *
+ * Call this from any code path that modifies the NZB index.
+ */
+function markDirty() {
+  if (!isConfigured()) return;
+
+  if (dirtyTimer) clearTimeout(dirtyTimer);
+  dirtyTimer = setTimeout(async () => {
+    dirtyTimer = null;
+    console.log("[NZB-BACKUP] Dirty flag — syncing to Dropbox...");
+    await runBackup(); // cooldown is enforced inside runBackup
+  }, DIRTY_DEBOUNCE_MS);
 }
 
 module.exports = {
@@ -385,4 +430,5 @@ module.exports = {
   getBackupInfo,
   isConfigured,
   autoRestore,
+  markDirty,
 };

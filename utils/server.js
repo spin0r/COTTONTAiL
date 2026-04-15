@@ -263,39 +263,47 @@ async function startWebServer(bot) {
       const result = await client.uploadNzb(fileContent, filename);
 
       if (result?.status === "success") {
-        // Send to Telegram log channel
-        if (_bot) {
-          try {
-            const { LOG_GROUP_ID } = require("./helpers");
-            if (LOG_GROUP_ID) {
-              const { InputFile } = require("grammy");
-              const logMsg = await _bot.api.sendDocument(
-                LOG_GROUP_ID,
-                new InputFile(fileContent, filename),
-                {
-                  caption: `<code>${filename}</code>`,
-                  parse_mode: "HTML",
-                },
-              );
+        // Send to Telegram log channel + index in DB (independent steps)
+        let logMsgId = 0;
+        const { LOG_GROUP_ID } = require("./helpers");
 
-              // Index in NZB database so /logs search can find it
-              try {
-                const nzbDb = require("../nzb/db");
-                const { extractKeywords } = require("../nzb/utils");
-                nzbDb.insertFile({
-                  msg_id: logMsg.message_id,
-                  file_name: filename,
-                  caption: filename,
-                  keywords: extractKeywords(filename, filename),
-                  file_type: "nzb",
-                });
-              } catch (dbErr) {
-                console.error("[NZB] DB index error (web):", dbErr.message);
-              }
-            }
+        if (_bot && LOG_GROUP_ID) {
+          try {
+            const { InputFile } = require("grammy");
+            const logMsg = await _bot.api.sendDocument(
+              LOG_GROUP_ID,
+              new InputFile(fileContent, filename),
+              {
+                caption: `<code>${filename}</code>`,
+                parse_mode: "HTML",
+              },
+            );
+            logMsgId = logMsg.message_id;
+            console.log(`[NZB] Sent to log channel: ${filename} (msg_id: ${logMsgId})`);
           } catch (e) {
-            console.error("Failed to send to log channel:", e.message);
+            console.error("[NZB] Failed to send to log channel:", e.message);
           }
+        } else {
+          console.warn(`[NZB] Skipping log channel (bot: ${!!_bot}, LOG_GROUP_ID: ${LOG_GROUP_ID})`);
+        }
+
+        // Always index in DB regardless of log channel result
+        try {
+          const nzbDb = require("../nzb/db");
+          const { extractKeywords } = require("../nzb/utils");
+          const { markDirty } = require("../nzb/backup");
+          nzbDb.insertFile({
+            msg_id: logMsgId,
+            file_name: filename,
+            caption: filename,
+            keywords: extractKeywords(filename, filename),
+            file_type: "nzb",
+          });
+          markDirty();
+          try { require("../handlers/nzb").clearSearchCache(); } catch (_) {}
+          console.log(`[NZB] Indexed (web): ${filename}`);
+        } catch (dbErr) {
+          console.error("[NZB] DB index error (web):", dbErr.message);
         }
 
         res.json({

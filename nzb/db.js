@@ -111,7 +111,7 @@ function getSearchStmt() {
       FROM nzb_fts f
       JOIN nzb_meta m ON m.msg_id = f.rowid
       WHERE nzb_fts MATCH @query
-      ORDER BY rank
+      ORDER BY m.uploaded_at DESC
       LIMIT @limit
     `);
   }

@@ -31,3 +31,13 @@ Thumbs.db
 __pycache__/
 *.pyc
 *.pyo
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+nzb_index.db
+nzb_index_backup.db
+
+# MTProto sessions
+*.session

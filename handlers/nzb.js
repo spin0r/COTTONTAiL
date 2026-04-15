@@ -18,6 +18,7 @@ const { StatusManager } = require("../statusManager");
 
 const db = require("../nzb/db");
 const { extractKeywords, normalizeQuery } = require("../nzb/utils");
+const { markDirty } = require("../nzb/backup");
 
 // ─── Search Result Cache ──────────────────────────────────────────────────────
 const SEARCH_CACHE = new Map();
@@ -40,6 +41,10 @@ function setCache(key, data) {
     SEARCH_CACHE.delete(firstKey);
   }
   SEARCH_CACHE.set(key, { data, ts: Date.now() });
+}
+
+function clearSearchCache() {
+  SEARCH_CACHE.clear();
 }
 
 // ─── Channel Link Helper ─────────────────────────────────────────────────────
@@ -66,7 +71,7 @@ function generateLogsMessage(results, page = 1, header = null) {
   let currentChars = 0;
 
   for (const r of results) {
-    const name = escapeHtml(r.file_name || "untitled");
+    const name = escapeHtml(r.caption?.trim() || r.file_name || "untitled");
     const link = buildMsgLink(LOG_GROUP_ID, r.msg_id);
 
     const itemText = `<b>${name}</b>\n${link} | /grab_${r.msg_id}\n\n`;
@@ -126,6 +131,7 @@ const handleNzbUpload = async (ctx) => {
   }
 
   try {
+    // 1. Copy to log group
     const logMsg = await ctx.api.copyMessage(
       LOG_GROUP_ID,
       ctx.chat.id,
@@ -139,6 +145,7 @@ const handleNzbUpload = async (ctx) => {
     const logMsgId = logMsg.message_id;
     const keywords = extractKeywords(displayName, caption);
 
+    // 2. Index in DB
     db.insertFile({
       msg_id: logMsgId,
       file_name: displayName,
@@ -146,12 +153,56 @@ const handleNzbUpload = async (ctx) => {
       keywords: keywords,
       file_type: "nzb",
     });
+    markDirty();
+    SEARCH_CACHE.clear();
 
     const total = db.getCount();
-    await ctx.reply(
-      `Indexed: <code>${escapeHtml(displayName)}</code>\nTotal files: <b>${total}</b>`,
+    const statusMsg = await ctx.reply(
+      `Indexed: <code>${escapeHtml(displayName)}</code>\nTotal files: <b>${total}</b>\n\nUploading to MagicNZB...`,
       { parse_mode: "HTML" }
     );
+
+    // 3. Download file content and upload to MagicNZB
+    try {
+      const fileObj = await ctx.api.getFile(document.file_id);
+      const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${fileObj.file_path}`;
+      const res = await axios.get(fileUrl, {
+        responseType: "arraybuffer",
+        timeout: 60000,
+      });
+      const fileContent = Buffer.from(res.data);
+
+      const userId = ctx.from.id;
+      const client = getClient(userId);
+      const result = await client.uploadNzb(fileContent, displayName);
+
+      if (result?.status === "success") {
+        await ctx.api.editMessageText(
+          ctx.chat.id,
+          statusMsg.message_id,
+          `Indexed: <code>${escapeHtml(displayName)}</code>\nTotal files: <b>${total}</b>\n\n✅ Uploaded to MagicNZB`,
+          { parse_mode: "HTML" }
+        );
+      } else {
+        const error = result?.error || "Unknown";
+        await ctx.api.editMessageText(
+          ctx.chat.id,
+          statusMsg.message_id,
+          `Indexed: <code>${escapeHtml(displayName)}</code>\nTotal files: <b>${total}</b>\n\n❌ MagicNZB: ${escapeHtml(error)}`,
+          { parse_mode: "HTML" }
+        );
+      }
+    } catch (uploadErr) {
+      console.error("[NZB] MagicNZB upload error:", uploadErr.message);
+      try {
+        await ctx.api.editMessageText(
+          ctx.chat.id,
+          statusMsg.message_id,
+          `Indexed: <code>${escapeHtml(displayName)}</code>\nTotal files: <b>${total}</b>\n\n❌ MagicNZB upload failed: ${escapeHtml(uploadErr.message.slice(0, 80))}`,
+          { parse_mode: "HTML" }
+        );
+      } catch (_) {}
+    }
   } catch (e) {
     console.error("[NZB] Index error:", e.message);
     await ctx.reply(`Failed to index: ${e.message.slice(0, 80)}`);
@@ -382,4 +433,5 @@ module.exports = {
   nzbStatsCommand,
   logsButtonHandler,
   grabNzbCommand,
+  clearSearchCache,
 };

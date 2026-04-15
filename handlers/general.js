@@ -381,7 +381,7 @@ const backupCommand = restricted(async (ctx) => {
 
   const msg = await ctx.reply("☁️ Running backup to Dropbox...");
   try {
-    await runBackup();
+    await runBackup(true);
     const info = await getBackupInfo();
     const text = info
       ? `✅ Backup complete\n\n📁 ${info.path}\n📦 ${info.sizeMB} MB\n🕒 ${info.modified}\n🔖 rev: <code>${info.rev}</code>`
