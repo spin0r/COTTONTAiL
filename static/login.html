@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>COTTONTAiL - Login</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+    }
+    .login-container {
+      width: 100%;
+      max-width: 400px;
+      padding: 40px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .login-header {
+      text-align: center;
+    }
+    .login-header h1 {
+      font-size: 1.5rem;
+      color: var(--fg);
+      margin-bottom: 8px;
+    }
+    .login-header p {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .form-group label {
+      font-size: 0.85rem;
+      color: var(--muted-strong);
+      font-weight: 500;
+    }
+    .form-group input {
+      padding: 12px 16px;
+      background: var(--surface-soft);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--fg);
+      font-family: var(--font);
+      font-size: 1rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+    .form-group input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+    }
+    .login-btn {
+      padding: 14px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .login-btn:hover {
+      background: #e54d00;
+    }
+    .login-btn:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    .error-msg {
+      color: var(--error);
+      font-size: 0.85rem;
+      text-align: center;
+      min-height: 20px;
+    }
+    #change-flow {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-container">
+    <div class="login-header">
+      <h1>COTTONTAiL</h1>
+      <p id="subtitle">Please login to access the dashboard</p>
+    </div>
+
+    <div class="error-msg" id="error"></div>
+
+    <!-- Normal Login Flow -->
+    <form id="login-form">
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="password" required autofocus>
+      </div>
+      <button type="submit" class="login-btn" style="margin-top: 16px;">Login</button>
+    </form>
+
+    <!-- Change Password Flow -->
+    <form id="change-form" style="display: none;">
+      <div class="form-group">
+        <label>Current Password</label>
+        <input type="password" id="current-pwd" required>
+      </div>
+      <div class="form-group" style="margin-top: 8px;">
+        <label>New Password</label>
+        <input type="password" id="new-pwd" required minlength="4">
+      </div>
+      <button type="submit" class="login-btn" style="margin-top: 16px;">Change Password & Login</button>
+    </form>
+  </div>
+
+  <script>
+    const isChangeFlow = new URLSearchParams(window.location.search).get('change') === 'true';
+    
+    const loginForm = document.getElementById('login-form');
+    const changeForm = document.getElementById('change-form');
+    const errorEl = document.getElementById('error');
+    const subtitle = document.getElementById('subtitle');
+
+    if (isChangeFlow) {
+      loginForm.style.display = 'none';
+      changeForm.style.display = 'block';
+      subtitle.textContent = 'For security, please change the default password.';
+      subtitle.style.color = 'var(--accent)';
+      document.getElementById('current-pwd').value = 'admin'; // Pre-fill
+      document.getElementById('new-pwd').focus();
+    }
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = loginForm.querySelector('button');
+      btn.disabled = true;
+      errorEl.textContent = '';
+      
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: document.getElementById('password').value })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          if (data.mustChange) {
+            window.location.href = '/login?change=true';
+          } else {
+            window.location.href = '/';
+          }
+        } else {
+          errorEl.textContent = data.error || 'Login failed';
+        }
+      } catch (err) {
+        errorEl.textContent = 'Network error';
+      }
+      btn.disabled = false;
+    });
+
+    changeForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = changeForm.querySelector('button');
+      btn.disabled = true;
+      errorEl.textContent = '';
+      
+      const currentPassword = document.getElementById('current-pwd').value;
+      const newPassword = document.getElementById('new-pwd').value;
+      
+      if (newPassword === currentPassword) {
+        errorEl.textContent = 'New password must be different';
+        btn.disabled = false;
+        return;
+      }
+      
+      try {
+        const res = await fetch('/api/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentPassword, newPassword })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          errorEl.textContent = data.error || 'Password change failed';
+        }
+      } catch (err) {
+        errorEl.textContent = 'Network error';
+      }
+      btn.disabled = false;
+    });
+  </script>
+</body>
+</html>

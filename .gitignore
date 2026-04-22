@@ -41,3 +41,4 @@ nzb_index_backup.db
 
 # MTProto sessions
 *.session
+auth.json

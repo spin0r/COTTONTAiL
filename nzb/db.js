@@ -88,6 +88,7 @@ let _searchStmt = null;
 let _isIndexedStmt = null;
 let _countStmt = null;
 let _getByMsgIdStmt = null;
+let _getRecentStmt = null;
 
 function getInsertStmt() {
   if (!_insertStmt) {
@@ -139,6 +140,18 @@ function getByMsgIdStmt() {
     );
   }
   return _getByMsgIdStmt;
+}
+
+function getRecentStmt() {
+  if (!_getRecentStmt) {
+    _getRecentStmt = db.prepare(`
+      SELECT msg_id, file_name, caption, uploaded_at
+      FROM nzb_meta
+      ORDER BY msg_id DESC
+      LIMIT @limit
+    `);
+  }
+  return _getRecentStmt;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -217,6 +230,18 @@ function search(query, limit = 15) {
 }
 
 /**
+ * Get recent NZB files.
+ *
+ * @param {number} [limit=50] - Max results
+ * @returns {Array<{msg_id: number, file_name: string, caption: string, uploaded_at: string}>}
+ */
+function getRecent(limit = 50) {
+  init();
+  const stmt = getRecentStmt();
+  return stmt.all({ limit });
+}
+
+/**
  * Check if a message ID is already indexed.
  *
  * @param {number} msgId
@@ -280,6 +305,7 @@ function close() {
     _isIndexedStmt = null;
     _countStmt = null;
     _getByMsgIdStmt = null;
+    _getRecentStmt = null;
     console.log("[NZB-DB] Closed.");
   }
 }
@@ -289,6 +315,7 @@ module.exports = {
   insertFile,
   bulkInsert,
   search,
+  getRecent,
   isIndexed,
   getCount,
   getByMsgId,

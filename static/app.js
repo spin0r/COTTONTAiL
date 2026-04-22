@@ -32,6 +32,7 @@ const ICONS = {
 
 // === Paste Handler ===
 window.addEventListener("paste", (e) => {
+  if (!fileInput) return;
   const items = (e.clipboardData || e.originalEvent.clipboardData).items;
   const files = [];
   for (const item of items) {
@@ -46,29 +47,33 @@ window.addEventListener("paste", (e) => {
 });
 
 // === Drag & Drop ===
-["dragenter", "dragover"].forEach((e) => {
-  dropZone.addEventListener(e, (ev) => {
-    ev.preventDefault();
-    dropZone.classList.add("drag-over");
+if (dropZone) {
+  ["dragenter", "dragover"].forEach((e) => {
+    dropZone.addEventListener(e, (ev) => {
+      ev.preventDefault();
+      dropZone.classList.add("drag-over");
+    });
   });
-});
-["dragleave", "drop"].forEach((e) => {
-  dropZone.addEventListener(e, (ev) => {
-    ev.preventDefault();
-    dropZone.classList.remove("drag-over");
+  ["dragleave", "drop"].forEach((e) => {
+    dropZone.addEventListener(e, (ev) => {
+      ev.preventDefault();
+      dropZone.classList.remove("drag-over");
+    });
   });
-});
-dropZone.addEventListener("drop", (ev) => {
-  const files = ev.dataTransfer.files;
-  if (files.length) handleFiles(files);
-});
+  dropZone.addEventListener("drop", (ev) => {
+    const files = ev.dataTransfer.files;
+    if (files.length) handleFiles(files);
+  });
+}
 
-fileInput.addEventListener("change", () => {
-  if (fileInput.files.length) handleFiles(fileInput.files);
-});
+if (fileInput) {
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length) handleFiles(fileInput.files);
+  });
+}
 
 // === Initial Load ===
-loadDriveFiles();
+if (driveFiles) loadDriveFiles();
 loadAccountInfo();
 
 // Auto-refresh account info every 30s (picks up cookie changes from bot)
@@ -81,7 +86,7 @@ async function loadAccountInfo() {
     const res = await fetch("/health");
     const data = await res.json();
     if (res.ok && data.status === "ok") {
-      bar.innerHTML = `<span class="account-label">@${data.bot}</span><span class="account-sep">•</span><span class="account-detail" style="display:inline-flex;align-items:center;gap:4px;">${ICONS.cookie} ${data.profile}${data.email ? ` (${data.email})` : ""}</span><span class="account-sep">•</span><span class="account-detail" style="display:inline-flex;align-items:center;gap:4px;">${ICONS.time} ${data.uptime}</span>`;
+      bar.innerHTML = `<span class="account-label">@${data.bot}</span><span class="account-sep">•</span><span class="account-detail" style="display:inline-flex;align-items:center;gap:4px;">${ICONS.cookie} ${data.profile}${data.email ? ` (${data.email})` : ""}</span><span class="account-sep">•</span><span class="account-detail" style="display:inline-flex;align-items:center;gap:4px;">${ICONS.time} <span id="sidebar-uptime">${data.uptime}</span></span>`;
       bar.classList.remove("error");
     } else {
       bar.innerHTML = `<span style="color:#f87171;display:inline-flex;align-items:center;gap:4px;">${ICONS.warning} Bot offline</span>`;
@@ -140,10 +145,9 @@ function handleFiles(files) {
 }
 
 // === Upload to Server ===
-uploadBtn.addEventListener("click", async () => {
+if (uploadBtn) uploadBtn.addEventListener("click", async () => {
   if (!selectedFiles.length) return;
   uploadBtn.disabled = true;
-  progressWrap.classList.add("visible");
   status.classList.remove("visible");
 
   let success = 0,
@@ -167,6 +171,8 @@ uploadBtn.addEventListener("click", async () => {
       success++;
       if (item) item.className = "file-item done";
       if (fstat) fstat.innerHTML = ICONS.success;
+      // Refresh drive files immediately as soon as one file finishes
+      loadDriveFiles();
     } catch (err) {
       failed++;
       if (item) item.className = "file-item failed";
@@ -174,8 +180,7 @@ uploadBtn.addEventListener("click", async () => {
     }
   }
 
-  progressFill.style.width = "100%";
-  progressPct.textContent = `${selectedFiles.length}/${selectedFiles.length}`;
+  // Removed overall progress bar update
 
   if (failed === 0) {
     showStatus(`All ${success} file(s) uploaded!`, "success");
@@ -183,19 +188,14 @@ uploadBtn.addEventListener("click", async () => {
       fileList.innerHTML = "";
       fileList.classList.remove("visible");
       uploadBtn.classList.remove("visible");
-      progressWrap.classList.remove("visible");
-      progressFill.style.width = "0%";
-      progressPct.textContent = "0%";
       selectedFiles = [];
       fileInput.value = "";
     }, 2000);
-    loadDriveFiles();
   } else {
     showStatus(
       `${success} uploaded, ${failed} failed.`,
       failed === selectedFiles.length ? "error" : "success",
     );
-    if (success > 0) loadDriveFiles();
   }
   uploadBtn.disabled = false;
   resetLink.classList.add("visible");
@@ -478,7 +478,8 @@ function closeModal() {
   modalCallback = null;
 }
 
-document.getElementById("modal-confirm-btn").addEventListener("click", () => {
+const _modalConfirmBtn = document.getElementById("modal-confirm-btn");
+if (_modalConfirmBtn) _modalConfirmBtn.addEventListener("click", () => {
   if (modalRemember.checked) {
     localStorage.setItem("skipConfirmations", "true");
   }
