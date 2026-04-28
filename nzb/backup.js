@@ -203,6 +203,13 @@ async function restoreFromDropbox() {
     );
 
     const restorePath = db.getDbPath();
+
+    // Remove stale WAL/SHM files — they belong to the old DB and will
+    // cause SQLITE_CORRUPT if left alongside the freshly restored file.
+    for (const suffix of ["-wal", "-shm"]) {
+      try { fs.unlinkSync(restorePath + suffix); } catch (_) {}
+    }
+
     fs.writeFileSync(restorePath, Buffer.from(data));
     const sizeMB = (data.byteLength / (1024 * 1024)).toFixed(2);
     console.log(

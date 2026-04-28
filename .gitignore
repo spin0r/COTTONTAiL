@@ -42,3 +42,4 @@ nzb_index_backup.db
 # MTProto sessions
 *.session
 auth.json
+nzb/mass-rename.js

@@ -10,7 +10,9 @@ const VICONS = {
   grab: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
   link: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
   check: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
-  spin: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>'
+  spin: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>',
+  edit: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+  save: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>'
 };
 
 function fmtSize(b) {
@@ -270,12 +272,21 @@ let _logDebounce = null;
 function initLogSearch() {
   const input = document.getElementById('log-search-input');
   if (!input) return;
+  const kbd = document.getElementById('log-search-kbd');
   input.addEventListener('input', () => {
     clearTimeout(_logDebounce);
     _logDebounce = setTimeout(() => doLogSearch(input.value.trim()), 400);
+    if (kbd) kbd.style.display = 'none';
   });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { clearTimeout(_logDebounce); doLogSearch(input.value.trim()); }
+  });
+  input.addEventListener('focus', () => { if (kbd) kbd.style.display = 'none'; });
+  input.addEventListener('blur', () => {
+    if (kbd && !input.value) {
+      const stats = document.getElementById('log-search-stats');
+      if (!stats || !stats.textContent) kbd.style.display = '';
+    }
   });
   // Load stats
   fetch('/api/logs/stats').then(r => r.json()).then(d => {
@@ -322,6 +333,10 @@ async function doLogSearch(query) {
           </div>
         </div>
         <div class="li-actions">
+          <button class="sm-btn" title="Rename" onclick="startLogEdit(this, ${r.msg_id}, '${escHtml(name).replace(/'/g, "\\'")}')"
+            style="background:transparent;color:var(--muted);padding:6px;min-width:auto">
+            ${VICONS.edit}
+          </button>
           <button class="sm-btn primary" id="grab-${r.msg_id}" onclick="grabNzb(${r.msg_id}, this)">
             ${VICONS.grab} Grab
           </button>
@@ -331,6 +346,68 @@ async function doLogSearch(query) {
   } catch (e) {
     stats.textContent = '';
     results.innerHTML = `<div class="log-empty"><p style="color:#f87171">${escHtml(e.message)}</p></div>`;
+  }
+}
+
+function startLogEdit(btn, msgId, currentName) {
+  const item = btn.closest('.log-item');
+  const nameEl = item.querySelector('.li-name');
+  const baseName = currentName.replace(/\.nzb$/i, '');
+
+  nameEl.outerHTML = `<input type="text" class="edit-input" value="${baseName}" />`;
+  const input = item.querySelector('.edit-input');
+  input.focus();
+  input.select();
+
+  // Replace the edit button with a save button
+  btn.outerHTML = `<button class="sm-btn" title="Save" onclick="saveLogEdit(this, ${msgId})"
+    style="background:transparent;color:#4ade80;padding:6px;min-width:auto">
+    ${VICONS.save}
+  </button>`;
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') item.querySelector('[title=Save]').click();
+    if (e.key === 'Escape') {
+      const searchInput = document.getElementById('log-search-input');
+      doLogSearch(searchInput ? searchInput.value.trim() : '');
+    }
+  });
+}
+
+async function saveLogEdit(btn, msgId) {
+  const item = btn.closest('.log-item');
+  const input = item.querySelector('.edit-input');
+  let newName = (input?.value || '').trim();
+
+  if (!newName) {
+    const searchInput = document.getElementById('log-search-input');
+    doLogSearch(searchInput ? searchInput.value.trim() : '');
+    return;
+  }
+
+  btn.innerHTML = VICONS.spin;
+
+  try {
+    const res = await fetch(`/api/logs/${msgId}/rename`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_name: newName }),
+    });
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      // Refresh results
+      const searchInput = document.getElementById('log-search-input');
+      doLogSearch(searchInput ? searchInput.value.trim() : '');
+    } else {
+      alert(data.error || 'Rename failed');
+      const searchInput = document.getElementById('log-search-input');
+      doLogSearch(searchInput ? searchInput.value.trim() : '');
+    }
+  } catch (e) {
+    alert('Network error: ' + e.message);
+    const searchInput = document.getElementById('log-search-input');
+    doLogSearch(searchInput ? searchInput.value.trim() : '');
   }
 }
 
@@ -411,6 +488,23 @@ function initRouter() {
   // Set initial state
   history.replaceState({ view: initial }, '', window.location.pathname);
   showView(initial);
+
+  // Press "/" — jump to Log Search from any tab (like GitHub/YouTube)
+  document.addEventListener('keydown', (e) => {
+    // Ignore if typing in an input or textarea
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+    if (e.key === '/') {
+      e.preventDefault();
+      history.pushState({ view: 'log' }, '', '/log');
+      showView('log');
+      setTimeout(() => {
+        const input = document.getElementById('log-search-input');
+        if (input) { input.focus(); input.select(); }
+      }, 50);
+    }
+  });
 }
 
 // ─── Nav Status ───────────────────────────────────────────────────────────────

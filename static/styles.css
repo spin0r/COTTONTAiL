@@ -83,6 +83,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--fg);height:100vh;w
 .search-input:focus{border-color:var(--accent);box-shadow:0 1px 2px rgba(167,139,250,0.12),0 1px 1px -1px rgba(167,139,250,0.08)}
 .search-input::placeholder{color:var(--muted);font-style:normal}
 .search-stats{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:0.78rem;color:var(--muted)}
+.search-kbd{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:0.72rem;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-family:var(--font);pointer-events:none;transition:opacity 0.15s ease;background:var(--surface-soft)}
+.search-stats:not(:empty)~.search-kbd{display:none}
 .log-results{display:flex;flex-direction:column;gap:6px}
 .log-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;color:var(--muted);gap:16px}
 .log-empty p{font-size:0.95rem}
@@ -92,6 +94,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--fg);height:100vh;w
 .li-name{font-weight:500;color:var(--fg);word-break:break-all;font-size:0.88rem;letter-spacing:-0.2px}
 .li-meta{font-size:0.75rem;color:var(--muted);margin-top:4px;display:flex;gap:12px}
 .li-actions{display:flex;gap:6px;flex-shrink:0}
+.log-item .edit-input{width:100%;background:var(--surface-soft);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-xs);padding:8px 12px;font-size:0.88rem;font-family:var(--font);outline:none;transition:border-color 0.2s ease,box-shadow 0.2s ease;letter-spacing:-0.2px;animation:editFadeIn 0.2s ease-out}
+.log-item .edit-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+@keyframes editFadeIn{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:translateY(0)}}
 
 /* === Shared Small Buttons === */
 .sm-btn{display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:14px;font-size:0.78rem;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface-soft);color:var(--muted-strong);transition:all 0.18s;white-space:nowrap;font-family:var(--font)}

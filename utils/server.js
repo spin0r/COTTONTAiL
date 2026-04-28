@@ -537,7 +537,7 @@ async function startWebServer(bot) {
         if (!ftsQuery) {
           return res.status(400).json({ error: "Invalid query" });
         }
-        results = nzbDb.search(ftsQuery, 200);
+        results = nzbDb.search(ftsQuery, 1000);
       }
 
       // Build message links
@@ -638,6 +638,62 @@ async function startWebServer(bot) {
         const error = result?.error || "Unknown error";
         res.status(502).json({ error });
       }
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // PUT /api/logs/:msg_id/rename — rename a log entry in DB + Telegram caption
+  app.put("/api/logs/:msg_id/rename", async (req, res) => {
+    const msgId = parseInt(req.params.msg_id, 10);
+    if (isNaN(msgId)) {
+      return res.status(400).json({ error: "Invalid message ID" });
+    }
+
+    let newName = (req.body?.new_name || "").trim();
+    if (!newName) {
+      return res.status(400).json({ error: "New name is required" });
+    }
+    if (!newName.toLowerCase().endsWith(".nzb")) newName += ".nzb";
+
+    try {
+      const nzbDb = require("../nzb/db");
+      const { extractKeywords } = require("../nzb/utils");
+      const { LOG_GROUP_ID: logGroupId } = require("./helpers");
+      const { markDirty } = require("../nzb/backup");
+
+      const record = nzbDb.getByMsgId(msgId);
+      if (!record) {
+        return res.status(404).json({ error: "Log entry not found" });
+      }
+
+      // 1. Try to update the Telegram log channel caption
+      let telegramOk = false;
+      if (_bot && logGroupId && msgId > 0) {
+        try {
+          await _bot.api.editMessageCaption(logGroupId, msgId, {
+            caption: `<code>${newName}</code>`,
+            parse_mode: "HTML",
+          });
+          telegramOk = true;
+          console.log(`[NZB] Renamed in log channel: msg_id=${msgId} → ${newName}`);
+        } catch (e) {
+          console.error(`[NZB] Failed to edit log channel caption (msg_id=${msgId}):`, e.message);
+        }
+      }
+
+      // 2. Always update local DB
+      const newKeywords = extractKeywords(newName, newName);
+      const result = nzbDb.updateFile(msgId, newName, newKeywords);
+      markDirty();
+      try { require("../handlers/nzb").clearSearchCache(); } catch (_) {}
+
+      res.json({
+        success: true,
+        new_name: newName,
+        telegram_updated: telegramOk,
+        db_updated: result.changes > 0,
+      });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

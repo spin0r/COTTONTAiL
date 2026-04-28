@@ -89,6 +89,7 @@ let _isIndexedStmt = null;
 let _countStmt = null;
 let _getByMsgIdStmt = null;
 let _getRecentStmt = null;
+let _updateFileStmt = null;
 
 function getInsertStmt() {
   if (!_insertStmt) {
@@ -152,6 +153,17 @@ function getRecentStmt() {
     `);
   }
   return _getRecentStmt;
+}
+
+function getUpdateFileStmt() {
+  if (!_updateFileStmt) {
+    _updateFileStmt = db.prepare(`
+      UPDATE nzb_meta
+      SET file_name = @file_name, caption = @caption, keywords = @keywords
+      WHERE msg_id = @msg_id
+    `);
+  }
+  return _updateFileStmt;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -296,6 +308,24 @@ function getByMsgId(msgId) {
   return getByMsgIdStmt().get(msgId);
 }
 
+/**
+ * Update file_name, caption, and keywords for an existing log entry.
+ *
+ * @param {number} msgId       - Telegram message ID
+ * @param {string} newFileName - New filename
+ * @param {string} newKeywords - Recalculated keyword string
+ * @returns {{ changes: number }} - 1 if updated, 0 if not found
+ */
+function updateFile(msgId, newFileName, newKeywords) {
+  init();
+  return getUpdateFileStmt().run({
+    msg_id: msgId,
+    file_name: newFileName,
+    caption: newFileName,
+    keywords: newKeywords,
+  });
+}
+
 function close() {
   if (db) {
     db.close();
@@ -306,6 +336,7 @@ function close() {
     _countStmt = null;
     _getByMsgIdStmt = null;
     _getRecentStmt = null;
+    _updateFileStmt = null;
     console.log("[NZB-DB] Closed.");
   }
 }
@@ -319,6 +350,7 @@ module.exports = {
   isIndexed,
   getCount,
   getByMsgId,
+  updateFile,
   getDb,
   getDbPath,
   close,
