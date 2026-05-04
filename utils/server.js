@@ -128,7 +128,7 @@ async function startWebServer(bot) {
     // Exempt static files
     if (req.path.startsWith('/static/')) return next();
     
-    const isApi = req.path.startsWith('/api/') || req.path === '/upload' || req.path === '/health';
+    const isApi = req.path.startsWith('/api/') || req.path === '/upload';
 
     if (auth.mustChange()) {
       // If they haven't changed the default password, force them to login page
@@ -146,9 +146,7 @@ async function startWebServer(bot) {
     next();
   };
 
-  app.use(requireAuth);
-
-  // Health
+  // Health (before auth — must be publicly accessible for Render health checks)
   app.get("/health", (req, res) => {
     const uptimeMs = Date.now() - _startTime;
     const totalSecs = Math.floor(uptimeMs / 1000);
@@ -173,6 +171,8 @@ async function startWebServer(bot) {
       uptimeSec: totalSecs,
     });
   });
+
+  app.use(requireAuth);
 
   // GET /api/profiles — list available cookie profiles
   app.get("/api/profiles", async (req, res) => {
