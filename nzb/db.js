@@ -90,6 +90,7 @@ let _countStmt = null;
 let _getByMsgIdStmt = null;
 let _getRecentStmt = null;
 let _updateFileStmt = null;
+let _deleteByMsgIdStmt = null;
 
 function getInsertStmt() {
   if (!_insertStmt) {
@@ -164,6 +165,13 @@ function getUpdateFileStmt() {
     `);
   }
   return _updateFileStmt;
+}
+
+function getDeleteByMsgIdStmt() {
+  if (!_deleteByMsgIdStmt) {
+    _deleteByMsgIdStmt = db.prepare(`DELETE FROM nzb_meta WHERE msg_id = ?`);
+  }
+  return _deleteByMsgIdStmt;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -326,6 +334,17 @@ function updateFile(msgId, newFileName, newKeywords) {
   });
 }
 
+/**
+ * Delete an NZB record by its log channel message ID.
+ *
+ * @param {number} msgId
+ * @returns {{ changes: number }} - 1 if deleted, 0 if not found
+ */
+function deleteByMsgId(msgId) {
+  init();
+  return getDeleteByMsgIdStmt().run(msgId);
+}
+
 function close() {
   if (db) {
     db.close();
@@ -337,6 +356,7 @@ function close() {
     _getByMsgIdStmt = null;
     _getRecentStmt = null;
     _updateFileStmt = null;
+    _deleteByMsgIdStmt = null;
     console.log("[NZB-DB] Closed.");
   }
 }
@@ -351,6 +371,7 @@ module.exports = {
   getCount,
   getByMsgId,
   updateFile,
+  deleteByMsgId,
   getDb,
   getDbPath,
   close,

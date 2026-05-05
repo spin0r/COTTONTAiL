@@ -208,6 +208,8 @@ async function deleteAllTransfers() {
 
 // ─── View Contents Modal ──────────────────────────────────────────────────────
 
+const IMAGE_EXTS = /\.(jpe?g|png|gif|webp|bmp|svg)$/i;
+
 async function viewContents(folderId) {
   const modal = document.getElementById('contents-modal');
   const list = document.getElementById('contents-list');
@@ -226,17 +228,28 @@ async function viewContents(folderId) {
     title.textContent = `Files (${data.total})`;
 
     if (!data.files.length) {
-      list.innerHTML = '<div class="transfers-empty" style="height:200px"><p>No video files found</p></div>';
+      list.innerHTML = '<div class="transfers-empty" style="height:200px"><p>No files found</p></div>';
       return;
     }
 
-    list.innerHTML = data.files.map(f => `
-      <div class="content-file">
-        <div class="cf-name">${escHtml(f.name)}</div>
-        <div class="cf-size">${fmtSize(f.size)}</div>
+    list.innerHTML = data.files.map(f => {
+      const isImage = IMAGE_EXTS.test(f.name);
+      let previewHtml = '';
+      if (isImage && f.link) {
+        previewHtml = `<div class="cf-preview">
+          <img src="${escHtml(f.link)}" alt="${escHtml(f.name)}" loading="lazy"
+               onclick="openImageLightbox('${escHtml(f.link).replace(/'/g, "\\'")}')" />
+        </div>`;
+      }
+      return `<div class="content-file${isImage ? ' has-preview' : ''}">
+        ${previewHtml}
+        <div class="cf-info">
+          <div class="cf-name">${escHtml(f.name)}</div>
+          <div class="cf-size">${fmtSize(f.size)}</div>
+        </div>
         ${f.link ? `<button class="cf-link" onclick="copyLink(this, '${escHtml(f.link).replace(/'/g, "\\'")}')">${VICONS.link} Copy Link</button>` : ''}
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   } catch (e) {
     list.innerHTML = `<div class="transfers-empty" style="height:200px"><p style="color:#f87171">${escHtml(e.message)}</p></div>`;
   }
@@ -244,6 +257,53 @@ async function viewContents(folderId) {
 
 function closeContentsModal() {
   document.getElementById('contents-modal').classList.remove('visible');
+}
+
+// Close modal on ESC key (lightbox takes priority)
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const lightbox = document.getElementById('image-lightbox');
+    if (lightbox && lightbox.classList.contains('visible')) {
+      closeImageLightbox();
+      return;
+    }
+    const modal = document.getElementById('contents-modal');
+    if (modal && modal.classList.contains('visible')) {
+      closeContentsModal();
+    }
+  }
+});
+
+// Close modal on clicking the overlay (outside the modal content)
+document.addEventListener('click', (e) => {
+  const modal = document.getElementById('contents-modal');
+  if (modal && modal.classList.contains('visible') && e.target === modal) {
+    closeContentsModal();
+  }
+});
+
+// ─── Image Lightbox ───────────────────────────────────────────────────────────
+
+function openImageLightbox(url) {
+  let lightbox = document.getElementById('image-lightbox');
+  if (!lightbox) {
+    lightbox = document.createElement('div');
+    lightbox.id = 'image-lightbox';
+    lightbox.className = 'lightbox-overlay';
+    lightbox.innerHTML = `<img class="lightbox-img" />`;
+    lightbox.addEventListener('click', (e) => {
+      if (e.target === lightbox) closeImageLightbox();
+    });
+    document.body.appendChild(lightbox);
+  }
+  const img = lightbox.querySelector('.lightbox-img');
+  img.src = url;
+  lightbox.classList.add('visible');
+}
+
+function closeImageLightbox() {
+  const lightbox = document.getElementById('image-lightbox');
+  if (lightbox) lightbox.classList.remove('visible');
 }
 
 function copyLink(btn, url) {
@@ -336,6 +396,10 @@ async function doLogSearch(query) {
           <button class="sm-btn" title="Rename" onclick="startLogEdit(this, ${r.msg_id}, '${escHtml(name).replace(/'/g, "\\'")}')"
             style="background:transparent;color:var(--muted);padding:6px;min-width:auto">
             ${VICONS.edit}
+          </button>
+          <button class="sm-btn" title="Delete" onclick="deleteLogEntry(${r.msg_id}, this)"
+            style="background:transparent;color:var(--muted);padding:6px;min-width:auto">
+            ${VICONS.trash}
           </button>
           <button class="sm-btn primary" id="grab-${r.msg_id}" onclick="grabNzb(${r.msg_id}, this)">
             ${VICONS.grab} Grab
@@ -430,6 +494,43 @@ async function grabNzb(msgId, btn) {
     btn.classList.remove('loading');
     btn.innerHTML = VICONS.grab + ' Retry';
     btn.title = e.message;
+  }
+}
+
+async function deleteLogEntry(msgId, btn) {
+  if (!confirm('Delete this entry from the log group and database?')) return;
+
+  const item = btn.closest('.log-item');
+  btn.innerHTML = VICONS.spin;
+  btn.style.color = '#f87171';
+
+  try {
+    const res = await fetch(`/api/logs/${msgId}`, { method: 'DELETE' });
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      // Animate removal
+      item.style.transition = 'opacity 0.3s, transform 0.3s';
+      item.style.opacity = '0';
+      item.style.transform = 'translateX(20px)';
+      setTimeout(() => {
+        item.remove();
+        // Update stats count
+        const stats = document.getElementById('log-search-stats');
+        if (stats) {
+          const match = stats.textContent.match(/(\d+)/);
+          if (match) stats.textContent = `${Math.max(0, parseInt(match[1]) - 1)} results`;
+        }
+      }, 300);
+    } else {
+      alert(data.error || 'Delete failed');
+      btn.innerHTML = VICONS.trash;
+      btn.style.color = 'var(--muted)';
+    }
+  } catch (e) {
+    alert('Network error: ' + e.message);
+    btn.innerHTML = VICONS.trash;
+    btn.style.color = 'var(--muted)';
   }
 }
 

@@ -111,16 +111,28 @@ body{font-family:var(--font);background:var(--bg);color:var(--fg);height:100vh;w
 .sm-btn.loading svg{animation:spin 1s linear infinite}
 
 /* === Contents Modal === */
-.modal-wide{max-width:700px;width:95%}
+.modal-wide{max-width:900px;width:92%}
 .modal-header-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
 .modal-close-btn{background:none;border:none;color:var(--muted);font-size:1.5rem;cursor:pointer;padding:4px 8px;border-radius:var(--radius-xs);transition:all 0.2s}
 .modal-close-btn:hover{color:var(--fg);background:var(--surface-soft)}
-.contents-list{max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.contents-list{max-height:80vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
 .content-file{display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border)}
 .cf-name{flex:1;word-break:break-all;font-size:0.85rem;color:var(--fg)}
 .cf-size{color:var(--muted);font-size:0.8rem;white-space:nowrap}
 .cf-link{color:var(--accent);font-size:0.78rem;white-space:nowrap;background:var(--accent-soft);border:1px solid rgba(167,139,250,0.3);border-radius:14px;padding:5px 10px;cursor:pointer;display:flex;align-items:center;gap:4px;transition:all 0.18s;font-family:var(--font);font-weight:600}
 .cf-link:hover{background:rgba(167,139,250,0.25);color:#c4b5fd}
+.cf-info{flex:1;min-width:0;display:flex;align-items:center;gap:12px}
+.content-file.has-preview{flex-direction:column;align-items:stretch;gap:8px}
+.content-file.has-preview .cf-info{margin-bottom:2px}
+.cf-preview{width:100%;display:flex;justify-content:center;padding:4px}
+.cf-preview img{max-width:100%;max-height:120px;border-radius:var(--radius-xs);object-fit:contain;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;border:1px solid var(--border)}
+.cf-preview img:hover{transform:scale(1.02);box-shadow:0 4px 20px rgba(0,0,0,0.4)}
+
+/* === Image Lightbox === */
+.lightbox-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;z-index:2000;opacity:0;pointer-events:none;transition:opacity 0.25s ease;cursor:zoom-out}
+.lightbox-overlay.visible{opacity:1;pointer-events:auto}
+.lightbox-img{max-width:94vw;max-height:94vh;object-fit:contain;border-radius:var(--radius-sm);box-shadow:0 8px 40px rgba(0,0,0,0.6);transform:scale(0.92);transition:transform 0.25s ease;cursor:default}
+.lightbox-overlay.visible .lightbox-img{transform:scale(1)}
 
 /* === Upload View Layout === */
 .layout-wrapper{display:flex;height:100%;width:100%}

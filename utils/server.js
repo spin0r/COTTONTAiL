@@ -495,8 +495,8 @@ async function startWebServer(bot) {
         }
       }
 
-      // Filter to video files, exclude samples
-      const filtered = [];
+      // Return all files with normalized fields
+      const allFiles = [];
       for (const f of files) {
         const name = (typeof f === "string" ? f : f.name || "").trim();
         const link =
@@ -504,14 +504,11 @@ async function startWebServer(bot) {
         const size =
           typeof f === "object" ? f.size || f.fileSize || f.file_size : null;
 
-        if (!name.match(/\.(mp4|mkv)$/i)) continue;
-        if (/sample/i.test(name)) continue;
-        if (link && /sample/i.test(link)) continue;
-
-        filtered.push({ name, size, link });
+        if (!name) continue;
+        allFiles.push({ name, size, link });
       }
 
-      res.json({ files: filtered, total: filtered.length });
+      res.json({ files: allFiles, total: allFiles.length });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -693,6 +690,50 @@ async function startWebServer(bot) {
         new_name: newName,
         telegram_updated: telegramOk,
         db_updated: result.changes > 0,
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // DELETE /api/logs/:msg_id — delete a log entry from DB + Telegram log group
+  app.delete("/api/logs/:msg_id", async (req, res) => {
+    const msgId = parseInt(req.params.msg_id, 10);
+    if (isNaN(msgId)) {
+      return res.status(400).json({ error: "Invalid message ID" });
+    }
+
+    try {
+      const nzbDb = require("../nzb/db");
+      const { LOG_GROUP_ID: logGroupId } = require("./helpers");
+      const { markDirty } = require("../nzb/backup");
+
+      const record = nzbDb.getByMsgId(msgId);
+      if (!record) {
+        return res.status(404).json({ error: "Log entry not found" });
+      }
+
+      // 1. Try to delete from Telegram log group
+      let telegramOk = false;
+      if (_bot && logGroupId && msgId > 0) {
+        try {
+          await _bot.api.deleteMessage(logGroupId, msgId);
+          telegramOk = true;
+          console.log(`[NZB] Deleted from log channel: msg_id=${msgId}`);
+        } catch (e) {
+          console.error(`[NZB] Failed to delete from log channel (msg_id=${msgId}):`, e.message);
+        }
+      }
+
+      // 2. Always delete from local DB
+      const result = nzbDb.deleteByMsgId(msgId);
+      markDirty();
+      try { require("../handlers/nzb").clearSearchCache(); } catch (_) {}
+
+      res.json({
+        success: true,
+        telegram_deleted: telegramOk,
+        db_deleted: result.changes > 0,
       });
     } catch (e) {
       res.status(500).json({ error: e.message });

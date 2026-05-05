@@ -329,43 +329,104 @@ function isConfigured() {
 }
 
 /**
- * Auto-restore: if local DB is missing or empty, pull from Dropbox.
- * Called once at startup before the bot starts.
+ * Auto-restore: if local DB is missing, empty, or older than Dropbox,
+ * pull the remote version. This prevents an old local DB from overwriting
+ * a newer Dropbox backup when the bot starts.
+ *
+ * Comparison strategy:
+ *   1. Local DB missing or empty → restore
+ *   2. Local DB exists → compare local row count + size against Dropbox
+ *      metadata. If Dropbox file is larger, the remote copy likely has
+ *      more data → restore it.
  */
 async function autoRestore() {
   if (!isConfigured()) return;
 
   const dbPath = db.getDbPath();
-  let needsRestore = false;
+  let localExists = false;
+  let localSize = 0;
+  let localCount = 0;
 
   try {
     const stat = fs.statSync(dbPath);
-    // Consider empty if under 4KB (SQLite header is ~100 bytes, empty schema is ~4KB)
-    if (stat.size < 4096) {
-      console.log(`[NZB-BACKUP] Local DB is empty (${stat.size} bytes), will restore from Dropbox.`);
-      needsRestore = true;
-    }
+    localSize = stat.size;
+    localExists = localSize >= 4096; // SQLite header + schema is ~4KB
   } catch (e) {
-    if (e.code === "ENOENT") {
-      console.log("[NZB-BACKUP] Local DB not found, will restore from Dropbox.");
-      needsRestore = true;
+    if (e.code !== "ENOENT") throw e;
+  }
+
+  // If local DB exists and has data, get its row count
+  if (localExists) {
+    try {
+      db.init();
+      localCount = db.getCount();
+    } catch (_) {
+      // DB is corrupt — treat as missing
+      localExists = false;
+      localCount = 0;
+      console.log("[NZB-BACKUP] Local DB appears corrupt, will restore from Dropbox.");
     }
   }
 
-  if (!needsRestore) return;
+  if (!localExists) {
+    console.log("[NZB-BACKUP] Local DB missing or empty, will restore from Dropbox.");
+    try {
+      const result = await restoreFromDropbox();
+      if (result) {
+        console.log("[NZB-BACKUP] Auto-restore complete.");
+      } else {
+        console.log("[NZB-BACKUP] No remote backup to restore — starting fresh.");
+      }
+    } catch (e) {
+      const detail = e.response?.data
+        ? (typeof e.response.data === "string" ? e.response.data : JSON.stringify(e.response.data))
+        : e.message;
+      console.error("[NZB-BACKUP] Auto-restore failed:", detail);
+    }
+    return;
+  }
 
+  // Local DB exists — compare with Dropbox version
   try {
-    const result = await restoreFromDropbox();
-    if (result) {
-      console.log("[NZB-BACKUP] Auto-restore complete.");
+    const remoteInfo = await getBackupInfo();
+    if (!remoteInfo) {
+      console.log("[NZB-BACKUP] No remote backup on Dropbox — keeping local DB.");
+      return;
+    }
+
+    console.log(
+      `[NZB-BACKUP] Local DB: ${localCount} rows, ${(localSize / 1048576).toFixed(2)} MB | ` +
+      `Dropbox: ${remoteInfo.sizeMB} MB, modified ${remoteInfo.modified}`
+    );
+
+    // If remote file is larger, it almost certainly has more rows (more data)
+    // Use a threshold to avoid restoring for trivial differences (WAL compaction etc.)
+    const remoteIsLarger = remoteInfo.size > localSize + 4096; // 4KB threshold
+
+    if (remoteIsLarger) {
+      console.log(
+        `[NZB-BACKUP] Dropbox DB is larger (${remoteInfo.sizeMB} MB vs ${(localSize / 1048576).toFixed(2)} MB) — restoring remote copy.`
+      );
+
+      // Close the current DB before overwriting
+      db.close();
+
+      const result = await restoreFromDropbox();
+      if (result) {
+        // Re-init DB with the restored file
+        db.init();
+        const newCount = db.getCount();
+        console.log(`[NZB-BACKUP] Restored from Dropbox: ${newCount} rows (was ${localCount}).`);
+      }
     } else {
-      console.log("[NZB-BACKUP] No remote backup to restore — starting fresh.");
+      console.log("[NZB-BACKUP] Local DB is up to date — no restore needed.");
     }
   } catch (e) {
     const detail = e.response?.data
       ? (typeof e.response.data === "string" ? e.response.data : JSON.stringify(e.response.data))
       : e.message;
-    console.error("[NZB-BACKUP] Auto-restore failed:", detail);
+    console.error("[NZB-BACKUP] Dropbox comparison failed:", detail);
+    // Non-fatal — proceed with local DB
   }
 }
 
