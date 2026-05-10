@@ -432,6 +432,69 @@ async function startWebServer(bot) {
     }
   });
 
+  // Upload directly to Log Group (skip MagicNZB)
+  app.post("/upload-to-log/:filename", async (req, res) => {
+    const filename = path.basename(req.params.filename);
+    const filepath = path.join(DOWNLOAD_DIR, filename);
+    if (!fs.existsSync(filepath))
+      return res.status(404).json({ error: "File not found" });
+
+    try {
+      const { LOG_GROUP_ID } = require("./helpers");
+      const fileContent = fs.readFileSync(filepath);
+
+      let logMsgId = 0;
+
+      if (!_bot || !LOG_GROUP_ID) {
+        return res.status(503).json({ error: "Bot or log channel not configured" });
+      }
+
+      // Send to Telegram log group
+      try {
+        const { InputFile } = require("grammy");
+        const logMsg = await _bot.api.sendDocument(
+          LOG_GROUP_ID,
+          new InputFile(fileContent, filename),
+          {
+            caption: `<code>${filename}</code>`,
+            parse_mode: "HTML",
+          },
+        );
+        logMsgId = logMsg.message_id;
+        console.log(`[NZB] Sent to log channel (direct): ${filename} (msg_id: ${logMsgId})`);
+      } catch (e) {
+        console.error("[NZB] Failed to send to log channel:", e.message);
+        return res.status(502).json({ error: `Failed to send to log group: ${e.message}` });
+      }
+
+      // Index in DB
+      try {
+        const nzbDb = require("../nzb/db");
+        const { extractKeywords } = require("../nzb/utils");
+        const { markDirty } = require("../nzb/backup");
+        nzbDb.insertFile({
+          msg_id: logMsgId,
+          file_name: filename,
+          caption: filename,
+          keywords: extractKeywords(filename, filename),
+          file_type: "nzb",
+        });
+        markDirty();
+        try { require("../handlers/nzb").clearSearchCache(); } catch (_) {}
+        console.log(`[NZB] Indexed (direct log): ${filename}`);
+      } catch (dbErr) {
+        console.error("[NZB] DB index error (direct log):", dbErr.message);
+      }
+
+      res.json({
+        status: "success",
+        message: `Sent ${filename} to log group`,
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Account info
   app.get("/account-info", (req, res) => {
     if (Object.keys(_accountInfo).length) return res.json(_accountInfo);

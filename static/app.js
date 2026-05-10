@@ -12,9 +12,27 @@ const driveFiles = document.getElementById("drive-files");
 const modalOverlay = document.getElementById("confirm-modal");
 const modalRemember = document.getElementById("modal-remember");
 const magicAllBtn = document.getElementById("magic-all-btn");
+const directLogCheckbox = document.getElementById("direct-log-checkbox");
 
 let selectedFiles = [];
 let modalCallback = null;
+
+// === Direct-to-Log Toggle ===
+function isDirectToLog() {
+  return directLogCheckbox && directLogCheckbox.checked;
+}
+
+if (directLogCheckbox) {
+  // Restore saved preference
+  if (localStorage.getItem('directToLog') === 'true') {
+    directLogCheckbox.checked = true;
+  }
+  directLogCheckbox.addEventListener('change', () => {
+    localStorage.setItem('directToLog', directLogCheckbox.checked);
+    // Re-render drive files to update button titles
+    loadDriveFiles();
+  });
+}
 
 const ICONS = {
   wait: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
@@ -277,10 +295,11 @@ function renderDriveFiles(files) {
     const isRecent = (Date.now() / 1000 - f.mtime) < 3600;
     const item = document.createElement("div");
     item.className = `drive-item ${isRecent ? "recent" : ""}`;
+    const uploadTitle = isDirectToLog() ? 'Upload to Log Group' : 'Upload to MagicNZB';
     item.innerHTML = `
             <div class="d-name" title="${f.name}">${f.name}</div>
             <div class="d-size">${formatSize(f.size)}</div>
-            <button class="action-btn magic" title="Upload to MagicNZB" data-filename="${f.name}" onclick="uploadToMagic('${f.name.replace(/'/g, "\\'")}', this)">${ICONS.upload}</button>
+            <button class="action-btn magic" title="${uploadTitle}" data-filename="${f.name}" onclick="uploadToMagic('${f.name.replace(/'/g, "\\'")}', this)">${ICONS.upload}</button>
             <button class="action-btn" title="Smart Rename" onclick="smartRename(this, '${f.name.replace(/'/g, "\\'")}')">${ICONS.smart}</button>
             <button class="action-btn" title="Edit" onclick="startEdit(this, '${f.name.replace(/'/g, "\\'")}')">${ICONS.edit}</button>
             <button class="action-btn delete" title="Delete" onclick="confirmDelete('${f.name.replace(/'/g, "\\'")}')">${ICONS.trash}</button>
@@ -392,10 +411,10 @@ async function uploadToMagic(filename, btn) {
   btn.innerHTML = ICONS.wait;
 
   try {
-    const res = await fetch(
-      `/upload-to-magic/${encodeURIComponent(filename)}`,
-      { method: "POST" },
-    );
+    const endpoint = isDirectToLog()
+      ? `/upload-to-log/${encodeURIComponent(filename)}`
+      : `/upload-to-magic/${encodeURIComponent(filename)}`;
+    const res = await fetch(endpoint, { method: "POST" });
     const data = await res.json();
 
     if (res.ok && data.status === "success") {
