@@ -7,6 +7,9 @@ const AUTH_FILE = path.join(__dirname, '..', 'auth.json');
 // Default is 'admin'
 const DEFAULT_PASSWORD = 'admin';
 
+// Session lifetime — matches the cookie maxAge (30 days)
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString('hex');
 }
@@ -15,10 +18,39 @@ function generateToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+/**
+ * Remove expired sessions from the array.
+ * Each session is { token, createdAt } with a 30-day TTL.
+ */
+function pruneExpired(sessions) {
+  const now = Date.now();
+  return sessions.filter(s => (now - s.createdAt) < SESSION_MAX_AGE_MS);
+}
+
 function loadAuth() {
   if (fs.existsSync(AUTH_FILE)) {
     try {
-      return JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8'));
+      const data = JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8'));
+
+      // Migrate legacy formats to timestamped session objects
+      if (!Array.isArray(data.sessionTokens)) {
+        // Very old format: single sessionToken string
+        const legacy = data.sessionToken;
+        data.sessionTokens = legacy
+          ? [{ token: legacy, createdAt: Date.now() }]
+          : [];
+        delete data.sessionToken;
+        saveAuth(data);
+      } else if (data.sessionTokens.length > 0 && typeof data.sessionTokens[0] === 'string') {
+        // Previous fix format: plain string array — migrate to objects
+        data.sessionTokens = data.sessionTokens.map(t => ({
+          token: t,
+          createdAt: Date.now()
+        }));
+        saveAuth(data);
+      }
+
+      return data;
     } catch (e) {
       console.error('Error reading auth.json', e);
     }
@@ -31,7 +63,7 @@ function loadAuth() {
     salt,
     hash: hashed,
     mustChange: true,
-    sessionToken: null
+    sessionTokens: []
   };
   saveAuth(authData);
   return authData;
@@ -59,29 +91,44 @@ function changePassword(newPassword) {
   auth.hash = hashPassword(newPassword, salt);
   auth.mustChange = false;
   
-  // Invalidate old sessions when password changes
-  auth.sessionToken = generateToken();
+  // Invalidate ALL sessions when password changes, start a fresh one
+  const token = generateToken();
+  auth.sessionTokens = [{ token, createdAt: Date.now() }];
   saveAuth(auth);
   
-  return auth.sessionToken;
+  return token;
 }
 
 function createSession() {
   const auth = loadAuth();
-  auth.sessionToken = generateToken();
+  const token = generateToken();
+
+  // Prune expired sessions on every login (cleans up dead incognito tokens)
+  auth.sessionTokens = pruneExpired(auth.sessionTokens);
+  auth.sessionTokens.push({ token, createdAt: Date.now() });
+
   saveAuth(auth);
-  return auth.sessionToken;
+  return token;
 }
 
 function verifySession(token) {
   if (!token) return false;
   const auth = loadAuth();
-  return auth.sessionToken === token;
+  const now = Date.now();
+  return auth.sessionTokens.some(
+    s => s.token === token && (now - s.createdAt) < SESSION_MAX_AGE_MS
+  );
 }
 
-function clearSession() {
+function clearSession(token) {
   const auth = loadAuth();
-  auth.sessionToken = null;
+  if (token) {
+    // Remove only the specific session (single-browser logout)
+    auth.sessionTokens = auth.sessionTokens.filter(s => s.token !== token);
+  } else {
+    // No token provided — clear all sessions (full logout)
+    auth.sessionTokens = [];
+  }
   saveAuth(auth);
 }
 
@@ -93,3 +140,4 @@ module.exports = {
   verifySession,
   clearSession
 };
+

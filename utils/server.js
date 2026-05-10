@@ -118,7 +118,7 @@ async function startWebServer(bot) {
   });
 
   app.post("/api/logout", (req, res) => {
-    auth.clearSession();
+    auth.clearSession(req.cookies.session);
     res.clearCookie('session');
     res.json({ success: true });
   });
