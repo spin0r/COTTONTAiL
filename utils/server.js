@@ -109,7 +109,7 @@ async function startWebServer(bot) {
     if (!auth.verifyPassword(currentPassword)) {
       return res.status(401).json({ error: "Current password incorrect" });
     }
-    if (!newPassword || newPassword.length < 4) {
+    if (!newPassword || newPassword.length < 1) {
       return res.status(400).json({ error: "New password too short" });
     }
     const token = auth.changePassword(newPassword);
