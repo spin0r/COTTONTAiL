@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- CSRF Token -->
+    <meta name="csrf-token" content="fAlJZ64IV1AKHdxJdJZKxzOHPEwnRkSPi9drNhWS">
+	<link rel="apple-touch-icon" sizes="57x57" href="https://magicnzb.com/apple-icon-57x57.png">
+	<link rel="apple-touch-icon" sizes="60x60" href="https://magicnzb.com/apple-icon-60x60.png">
+	<link rel="apple-touch-icon" sizes="72x72" href="https://magicnzb.com/apple-icon-72x72.png">
+	<link rel="apple-touch-icon" sizes="76x76" href="https://magicnzb.com/apple-icon-76x76.png">
+	<link rel="apple-touch-icon" sizes="114x114" href="https://magicnzb.com/apple-icon-114x114.png">
+	<link rel="apple-touch-icon" sizes="120x120" href="https://magicnzb.com/apple-icon-120x120.png">
+	<link rel="apple-touch-icon" sizes="144x144" href="https://magicnzb.com/apple-icon-144x144.png">
+	<link rel="apple-touch-icon" sizes="152x152" href="https://magicnzb.com/apple-icon-152x152.png">
+	<link rel="apple-touch-icon" sizes="180x180" href="https://magicnzb.com/apple-icon-180x180.png">
+	<link rel="icon" type="image/png" sizes="192x192"  href="https://magicnzb.com/android-icon-192x192.png">
+	<link rel="icon" type="image/png" sizes="32x32" href="https://magicnzb.com/favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="96x96" href="https://magicnzb.com/favicon-96x96.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="https://magicnzb.com/favicon-16x16.png">
+	<link rel="manifest" href="https://magicnzb.com/manifest.json">
+	<meta name="msapplication-TileColor" content="#ffffff">
+	<meta name="msapplication-TileImage" content="https://magicnzb.com/ms-icon-144x144.png">
+	<meta name="theme-color" content="#ffffff">
+
+    <title>Transfers -  magicNZB.com</title>
+
+	<meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
+	<!-- Google Tag Manager -->
+	<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+	new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+	j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+	'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+	})(window,document,'script','dataLayer','GTM-K7VKQ65');</script>
+	<!-- End Google Tag Manager -->
+	<link href="https://magicnzb.com/css/app.css" rel="stylesheet">
+	<link href="https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Outlined" rel="stylesheet"> 
+	<link href="https://magicnzb.com/css/app.css" rel="stylesheet">
+    <link href="https://magicnzb.com/css/all.css" rel="stylesheet">
+     <style type="text/css">
+.toggle-section-icon {
+    margin-right: 10px;
+  }
+  .toggle-section-header {
+    padding: .67rem 0;
+    font-size: 1.1rem;
+    line-height: 1.4rem;
+}
+  .toggle-section-title {
+    font-family: sourcesanspro-semibold,arial,"sans-serif";
+    font-weight: 400;
+    font-size: 1.1rem;
+  }
+  .toggle-section-action {
+    text-decoration: none;
+    color: #8f99a4;
+    font-size: .9rem;
+    line-height: 1.3rem;
+    font-family: sourcesanspro-semibold,arial,"sans-serif";
+    font-weight: 400;
+  }
+
+  .transfer-icon {
+    padding-right: 15px;
+    color: #1a73e8;
+    font-size: 2.2rem;
+ }
+  .is-finished .transfer-icon {
+    font-size: 2.13rem;
+  }
+  .is-queue .transfer-icon {
+    color: #f4bd6c
+  }
+
+  .is-other .transfer-icon {
+    color: #e9112c
+  }
+  .transfer-name, .transfer-name a {
+    font-size: 1.1rem;
+    line-height: 1.4rem;
+    color: #000;
+    word-break: break-all;
+  }
+  .transfer-name:hover {
+    color: #000;
+  }
+  .slide-enter-active, .slide-leave-active  {
+    transition: all .6s ease;
+  }
+  .slide-enter, .slide-leave-to
+  {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+
+  .sprite-arrow {
+      background-position: 0 0;
+      width: 158px;
+      height: 155px;
+  }
+  .sprite-arrow {
+    /*background-image: url(../img/sprite.png);*/
+    display: inline-block;
+    *display: inline;
+    *zoom: 1;
+    vertical-align: middle;
+    position: relative;
+  }
+
+  .uploader_complete .sprite-arrow {
+    position: absolute;
+    top: 50%;
+    -ms-transform: translate(0,-50%);
+    transform: translate(0,-50%);
+    margin-top: 20px;
+    right: 50px;
+  }
+
+  .upload-torrents-step {
+    text-align: center;
+    margin: 1.33rem 0;
+    padding: 2.67rem 0;
+    min-height: 2.8rem;
+    display: none;
+    position: relative;
+  }
+  .upload-torrents-step.is-active {
+    display: block;
+  }
+
+  .dropdown-menu {
+    transform: translate(0,5px);
+    box-shadow: 0 0 10px rgb(0 0 0 / 15%);
+  }
+
+  .dropdown-item:focus, .dropdown-item:hover {
+    color: #0accf9;
+    text-decoration: none;
+    background-color: transparent;
+  }
+
+  .dropdown-toggle::after {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin-left: .3em;
+    vertical-align: middle;
+    content: "";
+    border-top: .3em solid;
+    border-right: .3em solid transparent;
+    border-left: .3em solid transparent;
+    float: right;
+    margin-top: 13px;
+  }
+
+ .dropdown-toggle[aria-expanded="true"]:after {
+    transform: rotate(180deg);
+  }
+/*for the animation*/
+.dropdown-toggle:after {
+  transition: 0.5s;
+   float: right;
+   margin-top: 13px;
+}
+/*
+.transfer_list {
+    border-top: 1px solid rgba(0, 0, 0, 0.125) !important;
+    padding: 1.20rem;
+    position: relative;
+    z-index: 10;
+}
+
+.transfer_list div.icon i {
+    font-size: 30px;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
+.transfer_list div.name div a,
+.transfer_list div.name div p {
+    word-break: break-all;
+}
+
+.transfer_list:last-child {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125) !important;
+}*/
+
+.transfer-tbl tr {
+    display: flex;
+    align-items: stretch;
+    border-top: 1px solid rgba(0, 0, 0, 0.125) !important;
+    padding: 1.20rem;
+}
+
+.transfer-tbl tr:last-child {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125) !important;
+}
+
+.transfer-tbl td.icon i {
+    font-size: 30px;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
+.transfer-tbl td.name {
+    flex: 1 1 0;
+}
+
+div.bg {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: -1;
+}
+
+.transfer-tbl td.name a {
+    word-break: break-all;
+}
+
+.transfer-tbl td.name a small {
+    cursor: auto;
+}
+
+.transfer-tbl td.name a:hover {
+    text-decoration: none;
+}
+
+.transfer-tbl td {
+    display: flex;
+    align-items: center;
+}
+
+[data-toggle="collapse"] .arrow:before {
+    content: "\f0d8";
+}
+
+[aria-expanded="true"] .arrow:before {
+    content: "\f0d7";
+}
+
+[data-toggle="collapse"].collapsed .arrow:before {
+    content: "\f0d8";
+}
+
+.icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  stroke-width: 0;
+  stroke: currentColor;
+  fill: currentColor;
+}
+
+.nav-pills > li > a { 
+  border: none; 
+  color: #ffff;
+  margin-left: 0px;
+  font-size: 1.1rem;
+}
+
+.nav-pills > li > a i { 
+  line-height: inherit;
+}
+
+.nav-pills > li:first-child > a {
+    border-radius: 0px !important;
+}
+
+.nav-pills > li:last-child > a {
+    border-radius: 0px !important;
+}
+
+.nav-pills .nav-link {
+    padding: 20px 25px;
+}
+
+.nav-pills .nav-link.active {
+  color: #fff; 
+}
+
+.nav-pills .nav-link.active, .nav-pills .show > .nav-link {
+  background: none;
+}
+
+.nav-pills > li > a:hover {
+    background: inherit;
+}
+
+.nav-fill > .nav-link, .nav-fill .nav-item {
+      flex: 1 1 20%!important;
+}
+
+.all {
+  background: #1a73e8 !important;
+  color: #fff!important;
+}
+
+.finished { 
+  background: #59d05d!important;
+  color: #fff!important;
+}
+
+.inprogress { 
+  background: #fbad4c!important;
+  color: #fff!important;
+}
+
+.error { 
+  background: #ff646d!important;
+  color: #fff!important;
+}
+
+.actions div a {
+  color: #1a73e8;
+  font-size: 11px;
+}
+
+.actions div::after {
+  content: "•";
+  color: #4d7cfe;
+  padding: 0px 5px;
+}
+
+.actions div:last-child:after {
+  content: '';
+}
+
+
+.running {
+  position: relative;
+  z-index: 10;
+}
+
+.btn-border {
+  border: 1px solid #1d62f0 !important;
+}
+
+
+ </style>
+</head>
+<body>
+	<!-- Google Tag Manager (noscript) -->
+	<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-K7VKQ65"
+	height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+	<!-- End Google Tag Manager (noscript) -->
+	<div class="wrapper">
+		<div class="main-header">
+			<div class="logo-header">
+				<a href="https://magicnzb.com" class="logo">
+					<img src="https://magicnzb.com/logo.svg" width="140" class="mx-auto d-block mt-2" alt="magicNZB">
+				</a>
+								<button class="navbar-toggler sidenav-toggler ml-auto" type="button" data-toggle="collapse" data-target="collapse" aria-controls="sidebar" aria-expanded="false" aria-label="Toggle navigation">
+					<span class="navbar-toggler-icon"></span>
+				</button>
+				<button class="topbar-toggler more"><i class="la la-ellipsis-v"></i></button>
+							</div>
+			<nav class="navbar navbar-header navbar-expand-lg">
+				<div class="container-fluid" id="search">
+										<search-component></search-component>
+									</nav>
+			</div>
+			<div class="sidebar">
+				<div class="scrollbar-inner sidebar-wrapper">
+					<ul class="nav">
+												<!-- <li class="nav-item update-pro">
+							<button  data-toggle="modal" data-target="#modalUpdate">
+								<i class="material-icons-outlined navbottom__icon">sync_alt</i>
+								<p>New Transfer</p>
+							</button>
+						</li> -->
+						<li class="nav-item active">
+							<a href="https://magicnzb.com/transfers">
+								<i class="material-icons-outlined navbottom__icon">sync_alt</i>
+								<p>Transfers</p>
+							</a>
+						</li>
+						<!-- <li class="nav-item">
+							<a href="https://magicnzb.com/rss">
+								<i class="la la-rss"></i>
+								<p>RSS</p>
+							</a>
+						</li> -->
+						<li class="nav-item  ">
+							<a href="https://magicnzb.com/account">
+								<i class="la la-user"></i>
+								<p>Account</p>
+							</a>
+						</li>
+						<li class="nav-item">
+							<a href="https://magicnzb.com/logout">
+								<i class="la la-sign-out"></i>
+								<p>Logout</p>
+							</a>
+						</li>
+											</ul>
+				</div>
+			</div>
+			<div class="main-panel">
+								<div class="content">
+					<div class="container-fluid" id="magicnzb_app">
+   <transfer-component premium="1"></transfer-component>
+ </div>
+				</div>
+											</div>
+			<!-- navbottom navigation bar-->
+			<!-- <nav class="navbottom">
+				<a href="#" class="navbottom__link">
+					<i class="material-icons navbottom__icon">dashboard</i>
+					<span class="navbottom__text">Dashboard</span>
+				</a>
+				<a href="#" class="navbottom__link navbottom__link--active">
+					<i class="material-icons navbottom__icon">person</i>
+					<span class="navbottom__text">Profile</span>
+				</a>
+				<a href="#" class="navbottom__link">
+					<i class="material-icons navbottom__icon">devices</i>
+					<span class="navbottom__text">Devices</span>
+				</a>
+				<a href="#" class="navbottom__link">
+					<i class="material-icons navbottom__icon">lock</i>
+					<span class="navbottom__text">Privacy</span>
+				</a>
+				<a class="navbottom__link">
+				<button class="navbar-toggler sidenav-toggler " type="button" data-toggle="collapse" data-target="collapse" aria-controls="sidebar" aria-expanded="false" aria-label="Toggle navigation">
+					<i class="material-icons navbottom__icon">menu</i>
+				</button>
+				</a>
+					-<a href="#" class="navbottom__link">
+					<i class="material-icons navbottom__icon">settings</i>
+					<span class="navbottom__text">Settings</span>
+				</a>
+			</nav> -->
+			<!-- End navbottom navigation bar-->
+		</div>
+	</div>
+	<!-- Modal -->
+	<div class="modal fade" id="modalUpdate" tabindex="-1" role="dialog" aria-labelledby="modalUpdatePro" aria-hidden="true">
+		<div class="modal-dialog modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header bg-primary">
+					<h6 class="modal-title">Add New Transfer</h6>
+					<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+						<span aria-hidden="true">&times;</span>
+					</button>
+				</div>
+				<div class="modal-body text-center">									
+					<p>Currently under development, please try again soon.</p>
+					
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+				</div>
+			</div>
+		</div>
+	</div>
+</body>
+
+<script src="https://magicnzb.com/js/app.js?v=1779214443"></script>
+<script src="https://magicnzb.com/js/plugin/bootstrap-notify/bootstrap-notify.min.js"></script>
+<script src="https://magicnzb.com/js/plugin/jquery-scrollbar/jquery.scrollbar.min.js"></script>
+<script src="https://magicnzb.com/js/ready.min.js"></script>
+<script type="text/javascript" async src="https://cdn.reamaze.com/assets/reamaze.js"></script>
+<script type="text/javascript">
+  var _support = _support || { 'ui': {}, 'user': {} };
+  _support['account'] = 'magicnzb';
+  _support['ui']['contactMode'] = 'default';
+  _support['ui']['enableKb'] = 'true';
+  _support['ui']['styles'] = {
+    widgetColor: 'rgb(26, 115, 232)',
+    gradient: true,
+  };
+  _support['ui']['shoutboxFacesMode'] = "brand-avatar";
+  _support['ui']['shoutboxHeaderLogo'] = true;
+  _support['ui']['widget'] = {
+    icon: 'chat',
+    displayOn: 'all',
+    allowBotProcessing: true,
+    label: {
+      text: 'Questions? Let me know! 😊',
+      mode: "prompt-3",
+      delay: 5,
+      duration: 5,
+    },
+    position: 'bottom-right',
+    mobilePosition: 'bottom-right'
+  };
+  _support['apps'] = {
+    faq: {"enabled":true},
+    recentConversations: {},
+    orders: {}
+  };
+</script>
+                 
+        <script type="text/javascript">
+            _support['custom_fields'] = {
+                premium_until: {
+                  type: "hidden",
+                  value: "21 days remaining",
+                  pos: 1
+                },
+                customer_id: {
+                  type: "hidden",
+                  value: "111158596",
+                  pos: 2
+                },
+                cdn: {
+                  type: "hidden",
+                  value: "auto",
+                  pos: 3
+                },
+                current_url: {
+                   type: "hidden",
+                   value: "https://magicnzb.com/transfers",
+                   pos: 4
+                },                   
+                pmadmin_link: {
+                  type: "hidden",
+                  value: "https://pmadmin.prmapps.com/user-manager/111158596",
+                  pos: 5
+                },
+            };
+            
+        </script>
+       <script type="text/javascript">
+    $(".nav-pills li.nav-item a.nav-link").click(function() {
+      $(".nav-pills li.nav-item a.nav-link").removeClass('active');
+    });
+ </script>
+</html>

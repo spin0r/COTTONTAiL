@@ -29,56 +29,7 @@ function escHtml(s) {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// ─── Active Transfers ─────────────────────────────────────────────────────────
-
-async function loadActiveTransfers() {
-  const grid = document.getElementById('active-transfers-grid');
-  try {
-    const res = await fetch('/api/transfers');
-    if (!res.ok) { const e = await res.json(); throw new Error(e.error || res.statusText); }
-    const data = await res.json();
-    _transfersData = data;
-    renderActiveTransfers(data, grid);
-  } catch (e) {
-    grid.innerHTML = `<div class="transfers-empty"><p style="color:#f87171">Error: ${escHtml(e.message)}</p></div>`;
-  }
-}
-
-function renderActiveTransfers(data, grid) {
-  const running = data.running || [];
-  const queued = data.queued || [];
-  const errors = data.error || data.failed || [];
-  const all = [...running.map(t => ({...t, _s: 'running'})), ...queued.map(t => ({...t, _s: 'queued'})), ...errors.map(t => ({...t, _s: 'error'}))];
-
-  if (!all.length) {
-    grid.innerHTML = '<div class="transfers-empty" style="height:120px"><p>No active transfers</p></div>';
-    return;
-  }
-
-  grid.innerHTML = all.map(t => {
-    let prog = 0;
-    try {
-      const raw = parseFloat(String(t.progress || 0).replace('%', ''));
-      prog = raw <= 1 && raw > 0 ? raw * 100 : raw;
-    } catch(_){}
-    const msg = t.message || '';
-    if (prog === 0 && msg) { const m = msg.match(/(\d+(?:\.\d+)?)%/); if (m) prog = parseFloat(m[1]); }
-
-    return `<div class="transfer-card ${t._s}">
-      <div class="tc-top">
-        <div class="tc-name">${escHtml(t.name || 'Unknown')}</div>
-        <span class="tc-badge ${t._s}">${t._s}</span>
-      </div>
-      ${t._s === 'running' ? `<div class="tc-progress"><div class="tc-progress-bar"><div class="tc-progress-fill" style="width:${prog}%"></div></div></div><div class="tc-meta"><span>${prog.toFixed(1)}%</span></div>` : ''}
-      ${msg ? `<div class="tc-message">${escHtml(msg)}</div>` : ''}
-      <div class="tc-meta" style="margin-top:8px">
-        <button class="sm-btn danger" onclick="deleteTransfer('${t.id}')">
-          ${VICONS.trash} Delete
-        </button>
-      </div>
-    </div>`;
-  }).join('');
-}
+// ─── Transfers (single flat list) ─────────────────────────────────────────────
 
 function startTransfersPolling() {
   _listInterval = setInterval(() => {
@@ -91,10 +42,8 @@ function stopTransfersPolling() {
   if (_listInterval) { clearInterval(_listInterval); _listInterval = null; }
 }
 
-// Combined loader for the unified Transfers page
 async function loadTransfersPage() {
-  const activeGrid = document.getElementById('active-transfers-grid');
-  const historyGrid = document.getElementById('history-transfers-grid');
+  const grid = document.getElementById('transfers-grid');
   const subtitle = document.getElementById('transfers-subtitle');
 
   try {
@@ -103,40 +52,18 @@ async function loadTransfersPage() {
     const data = await res.json();
     _transfersData = data;
 
-    // Render active
-    renderActiveTransfers(data, activeGrid);
-
-    // Render history
     const input = document.getElementById('transfers-search-input');
     const query = input ? input.value.trim() : '';
-    renderTransferHistory(data, historyGrid, query);
+    renderTransfers(data, grid, query);
 
-    // Update subtitle
+    // Update subtitle counts
     const running = (data.running || []).length;
     const queued = (data.queued || []).length;
     const finished = (data.finished || []).length;
     const errors = (data.error || data.failed || []).length;
-    if (subtitle) subtitle.textContent = `${running} running · ${queued} queued · ${finished} completed · ${errors} failed`;
+    if (subtitle) subtitle.textContent = `${running + queued} active · ${finished} completed · ${errors} failed`;
   } catch (e) {
-    if (activeGrid) activeGrid.innerHTML = `<div class="transfers-empty" style="height:120px"><p style="color:#f87171">Error: ${escHtml(e.message)}</p></div>`;
-    if (historyGrid) historyGrid.innerHTML = `<div class="transfers-empty" style="height:120px"><p style="color:#f87171">Error: ${escHtml(e.message)}</p></div>`;
-  }
-}
-
-// ─── Transfer History (/transfers) ────────────────────────────────────────────
-
-async function loadTransferHistory() {
-  const grid = document.getElementById('history-transfers-grid');
-  try {
-    const res = await fetch('/api/transfers');
-    if (!res.ok) { const e = await res.json(); throw new Error(e.error || res.statusText); }
-    const data = await res.json();
-    _transfersData = data;
-    const input = document.getElementById('transfers-search-input');
-    const query = input ? input.value.trim() : '';
-    renderTransferHistory(data, grid, query);
-  } catch (e) {
-    grid.innerHTML = `<div class="transfers-empty"><p style="color:#f87171">Error: ${escHtml(e.message)}</p></div>`;
+    if (grid) grid.innerHTML = `<div class="transfers-empty"><p style="color:#f87171">Error: ${escHtml(e.message)}</p></div>`;
   }
 }
 
@@ -148,18 +75,22 @@ function initTransferHistorySearch() {
     clearTimeout(_transfersSearchDebounce);
     _transfersSearchDebounce = setTimeout(() => {
       if (_transfersData) {
-        const query = input.value.trim();
-        renderTransferHistory(_transfersData, document.getElementById('history-transfers-grid'), query);
+        renderTransfers(_transfersData, document.getElementById('transfers-grid'), input.value.trim());
       }
     }, 300);
   });
 }
 
-function renderTransferHistory(data, grid, query = '') {
-  const finished = data.finished || [];
-  const errors = data.error || data.failed || [];
-  let all = [...errors.map(t => ({...t, _s: 'error'})), ...finished.map(t => ({...t, _s: 'finished'}))];
+function renderTransfers(data, grid, query = '') {
+  const running = (data.running || []).map(t => ({...t, _s: 'running'}));
+  const queued  = (data.queued  || []).map(t => ({...t, _s: 'queued'}));
+  const errors  = (data.error || data.failed || []).map(t => ({...t, _s: 'error'}));
+  const finished = (data.finished || []).map(t => ({...t, _s: 'finished'}));
 
+  // Running first, then queued, errors, finished
+  let all = [...running, ...queued, ...errors, ...finished];
+
+  // Filter by search query
   if (query) {
     const q = query.toLowerCase().replace(/[._\-]/g, " ");
     all = all.filter(item => (item.name || "").toLowerCase().replace(/[._\-]/g, " ").includes(q));
@@ -170,23 +101,41 @@ function renderTransferHistory(data, grid, query = '') {
     if (stats) stats.textContent = '';
   }
 
-  // subtitle is now managed by loadTransfersPage
-
   if (!all.length) {
-    grid.innerHTML = '<div class="transfers-empty"><p>No completed or failed transfers</p></div>';
+    grid.innerHTML = '<div class="transfers-empty"><p>No transfers</p></div>';
     return;
   }
 
   grid.innerHTML = all.map(t => {
+    // Progress bar for running transfers
+    let progHtml = '';
+    if (t._s === 'running') {
+      let prog = 0;
+      try {
+        const raw = parseFloat(String(t.progress || 0).replace('%', ''));
+        prog = raw <= 1 && raw > 0 ? raw * 100 : raw;
+      } catch(_){}
+      const msg = t.message || '';
+      if (prog === 0 && msg) { const m = msg.match(/(\d+(?:\.\d+)?)%/); if (m) prog = parseFloat(m[1]); }
+      progHtml = `<div class="tc-progress"><div class="tc-progress-bar"><div class="tc-progress-fill" style="width:${prog}%"></div></div></div><div class="tc-meta"><span>${prog.toFixed(1)}%</span></div>`;
+    }
+
+    // View button for finished transfers
     const folderId = t.folder_id || t.id || '';
     const viewBtn = t._s === 'finished' && folderId
       ? `<button class="sm-btn primary" onclick="viewContents('${folderId}')">${VICONS.eye} View</button>` : '';
+
+    // Error message
+    const msgHtml = (t._s === 'error' || t._s === 'running') && t.message
+      ? `<div class="tc-message">${escHtml(t.message)}</div>` : '';
+
     return `<div class="transfer-card ${t._s}">
       <div class="tc-top">
         <div class="tc-name">${escHtml(t.name || 'Unknown')}</div>
         <span class="tc-badge ${t._s}">${t._s}</span>
       </div>
-      ${t._s === 'error' && t.message ? `<div class="tc-message">${escHtml(t.message)}</div>` : ''}
+      ${progHtml}
+      ${msgHtml}
       <div class="tc-meta" style="margin-top:8px">
         ${viewBtn}
         <button class="sm-btn danger" onclick="deleteTransfer('${t.id}')">${VICONS.trash} Delete</button>

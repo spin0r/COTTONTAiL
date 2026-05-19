@@ -20,6 +20,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const axios = require("axios");
+const Database = require("better-sqlite3");
 require("dotenv").config();
 
 const db = require("./db");
@@ -386,7 +387,8 @@ async function autoRestore() {
     return;
   }
 
-  // Local DB exists — compare with Dropbox version
+  // Local DB exists — compare row counts with Dropbox version
+  const tempDbPath = path.join(__dirname, "..", "nzb_index_remote_tmp.db");
   try {
     const remoteInfo = await getBackupInfo();
     if (!remoteInfo) {
@@ -399,33 +401,74 @@ async function autoRestore() {
       `Dropbox: ${remoteInfo.sizeMB} MB, modified ${remoteInfo.modified}`
     );
 
-    // If remote file is larger, it almost certainly has more rows (more data)
-    // Use a threshold to avoid restoring for trivial differences (WAL compaction etc.)
-    const remoteIsLarger = remoteInfo.size > localSize + 4096; // 4KB threshold
+    // Download remote DB to a temp file and count its rows for accurate comparison.
+    // File-size comparison is unreliable — WAL compaction and page reuse mean a DB
+    // with more rows can be the same size (or even smaller) than the local copy.
+    const token = await getAccessToken();
+    const { data: remoteData } = await axios.post(
+      "https://content.dropboxapi.com/2/files/download",
+      null,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Dropbox-API-Arg": JSON.stringify({ path: DROPBOX_PATH }),
+          "Content-Type": "application/octet-stream",
+        },
+        responseType: "arraybuffer",
+        maxContentLength: 150 * 1024 * 1024,
+      },
+    );
 
-    if (remoteIsLarger) {
+    fs.writeFileSync(tempDbPath, Buffer.from(remoteData));
+
+    let remoteCount = 0;
+    try {
+      const tempDb = new Database(tempDbPath, { readonly: true });
+      const row = tempDb.prepare("SELECT COUNT(*) as cnt FROM nzb_meta").get();
+      remoteCount = row ? row.cnt : 0;
+      tempDb.close();
+    } catch (dbErr) {
+      console.error("[NZB-BACKUP] Failed to read remote DB row count:", dbErr.message);
+      try { fs.unlinkSync(tempDbPath); } catch (_) {}
+      return;
+    }
+
+    console.log(
+      `[NZB-BACKUP] Row comparison — local: ${localCount}, remote: ${remoteCount}`
+    );
+
+    if (remoteCount > localCount) {
       console.log(
-        `[NZB-BACKUP] Dropbox DB is larger (${remoteInfo.sizeMB} MB vs ${(localSize / 1048576).toFixed(2)} MB) — restoring remote copy.`
+        `[NZB-BACKUP] Dropbox has more rows (${remoteCount} vs ${localCount}) — restoring remote copy.`
       );
 
       // Close the current DB before overwriting
       db.close();
 
-      const result = await restoreFromDropbox();
-      if (result) {
-        // Re-init DB with the restored file
-        db.init();
-        const newCount = db.getCount();
-        console.log(`[NZB-BACKUP] Restored from Dropbox: ${newCount} rows (was ${localCount}).`);
+      // Move the already-downloaded temp file into place (no need to re-download)
+      const restorePath = db.getDbPath();
+      for (const suffix of ["-wal", "-shm"]) {
+        try { fs.unlinkSync(restorePath + suffix); } catch (_) {}
       }
+      fs.renameSync(tempDbPath, restorePath);
+
+      const sizeMB = (remoteData.byteLength / (1024 * 1024)).toFixed(2);
+      console.log(`[NZB-BACKUP] Restored from Dropbox → ${restorePath} (${sizeMB} MB)`);
+
+      // Re-init DB with the restored file
+      db.init();
+      const newCount = db.getCount();
+      console.log(`[NZB-BACKUP] Restored from Dropbox: ${newCount} rows (was ${localCount}).`);
     } else {
       console.log("[NZB-BACKUP] Local DB is up to date — no restore needed.");
+      try { fs.unlinkSync(tempDbPath); } catch (_) {}
     }
   } catch (e) {
     const detail = e.response?.data
       ? (typeof e.response.data === "string" ? e.response.data : JSON.stringify(e.response.data))
       : e.message;
     console.error("[NZB-BACKUP] Dropbox comparison failed:", detail);
+    try { fs.unlinkSync(tempDbPath); } catch (_) {}
     // Non-fatal — proceed with local DB
   }
 }
