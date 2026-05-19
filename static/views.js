@@ -29,7 +29,7 @@ function escHtml(s) {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// ─── Active Transfers (/list) ─────────────────────────────────────────────────
+// ─── Active Transfers ─────────────────────────────────────────────────────────
 
 async function loadActiveTransfers() {
   const grid = document.getElementById('active-transfers-grid');
@@ -51,11 +51,9 @@ function renderActiveTransfers(data, grid) {
   const all = [...running.map(t => ({...t, _s: 'running'})), ...queued.map(t => ({...t, _s: 'queued'})), ...errors.map(t => ({...t, _s: 'error'}))];
 
   if (!all.length) {
-    grid.innerHTML = '<div class="transfers-empty"><p>No active transfers</p></div>';
-    document.getElementById('list-subtitle').textContent = 'No running or queued transfers';
+    grid.innerHTML = '<div class="transfers-empty" style="height:120px"><p>No active transfers</p></div>';
     return;
   }
-  document.getElementById('list-subtitle').textContent = `${running.length} running · ${queued.length} queued · ${errors.length} errors`;
 
   grid.innerHTML = all.map(t => {
     let prog = 0;
@@ -82,16 +80,47 @@ function renderActiveTransfers(data, grid) {
   }).join('');
 }
 
-function startListPolling() {
-  loadActiveTransfers();
+function startTransfersPolling() {
   _listInterval = setInterval(() => {
     const cb = document.getElementById('auto-refresh-checkbox');
-    if (cb && cb.checked) loadActiveTransfers();
+    if (cb && cb.checked) loadTransfersPage();
   }, 5000);
 }
 
-function stopListPolling() {
+function stopTransfersPolling() {
   if (_listInterval) { clearInterval(_listInterval); _listInterval = null; }
+}
+
+// Combined loader for the unified Transfers page
+async function loadTransfersPage() {
+  const activeGrid = document.getElementById('active-transfers-grid');
+  const historyGrid = document.getElementById('history-transfers-grid');
+  const subtitle = document.getElementById('transfers-subtitle');
+
+  try {
+    const res = await fetch('/api/transfers');
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || res.statusText); }
+    const data = await res.json();
+    _transfersData = data;
+
+    // Render active
+    renderActiveTransfers(data, activeGrid);
+
+    // Render history
+    const input = document.getElementById('transfers-search-input');
+    const query = input ? input.value.trim() : '';
+    renderTransferHistory(data, historyGrid, query);
+
+    // Update subtitle
+    const running = (data.running || []).length;
+    const queued = (data.queued || []).length;
+    const finished = (data.finished || []).length;
+    const errors = (data.error || data.failed || []).length;
+    if (subtitle) subtitle.textContent = `${running} running · ${queued} queued · ${finished} completed · ${errors} failed`;
+  } catch (e) {
+    if (activeGrid) activeGrid.innerHTML = `<div class="transfers-empty" style="height:120px"><p style="color:#f87171">Error: ${escHtml(e.message)}</p></div>`;
+    if (historyGrid) historyGrid.innerHTML = `<div class="transfers-empty" style="height:120px"><p style="color:#f87171">Error: ${escHtml(e.message)}</p></div>`;
+  }
 }
 
 // ─── Transfer History (/transfers) ────────────────────────────────────────────
@@ -141,7 +170,7 @@ function renderTransferHistory(data, grid, query = '') {
     if (stats) stats.textContent = '';
   }
 
-  document.getElementById('transfers-subtitle').textContent = `${finished.length} completed · ${errors.length} failed`;
+  // subtitle is now managed by loadTransfersPage
 
   if (!all.length) {
     grid.innerHTML = '<div class="transfers-empty"><p>No completed or failed transfers</p></div>';
@@ -173,10 +202,7 @@ async function deleteTransfer(id) {
   try {
     const res = await fetch(`/api/transfers/${encodeURIComponent(id)}`, { method: 'DELETE' });
     if (res.ok) {
-      // Refresh whichever view is active
-      const currentView = document.querySelector('.nav-link.active')?.dataset?.view;
-      if (currentView === 'list') loadActiveTransfers();
-      else if (currentView === 'transfers') loadTransferHistory();
+      loadTransfersPage();
     } else {
       const d = await res.json();
       alert(d.error || 'Delete failed');
@@ -202,7 +228,7 @@ async function deleteAllTransfers() {
       } catch(_){}
     }
     alert(`Deleted ${ok}/${ids.length}`);
-    loadTransferHistory();
+    loadTransfersPage();
   } catch (e) { alert('Error: ' + e.message); }
 }
 
@@ -537,7 +563,7 @@ async function deleteLogEntry(msgId, btn) {
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 function initRouter() {
-  const views = ['upload', 'list', 'transfers', 'log', 'account'];
+  const views = ['upload', 'transfers', 'log', 'account'];
   const navLinks = document.querySelectorAll('.nav-link');
 
   function showView(name) {
@@ -555,10 +581,9 @@ function initRouter() {
       activeEl.style.animation = '';
     }
 
-    stopListPolling();
+    stopTransfersPolling();
 
-    if (name === 'list') startListPolling();
-    else if (name === 'transfers') loadTransferHistory();
+    if (name === 'transfers') { loadTransfersPage(); startTransfersPolling(); }
     else if (name === 'log') initLogSearch();
     else if (name === 'account') loadAccountPage();
   }
@@ -566,8 +591,7 @@ function initRouter() {
   // Determine initial view from URL path
   const path = window.location.pathname;
   let initial = 'upload';
-  if (path === '/list') initial = 'list';
-  else if (path === '/transfers') initial = 'transfers';
+  if (path === '/list' || path === '/transfers') initial = 'transfers';
   else if (path === '/log') initial = 'log';
   else if (path === '/account') initial = 'account';
 

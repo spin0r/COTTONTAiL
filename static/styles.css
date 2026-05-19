@@ -53,6 +53,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--fg);height:100vh;w
 
 /* === Transfer Cards === */
 .transfers-grid{display:flex;flex-direction:column;gap:8px}
+.transfers-section{margin-bottom:32px}
+.transfers-section:last-child{margin-bottom:0}
+.transfers-section-title{font-size:0.9rem;font-weight:600;color:var(--muted-strong);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;padding-left:12px;border-left:3px solid var(--accent);line-height:1}
 .transfers-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;color:var(--muted);gap:16px}
 .transfers-empty p{font-size:0.95rem}
 
