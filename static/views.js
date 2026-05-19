@@ -537,7 +537,7 @@ async function deleteLogEntry(msgId, btn) {
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 function initRouter() {
-  const views = ['upload', 'list', 'transfers', 'log'];
+  const views = ['upload', 'list', 'transfers', 'log', 'account'];
   const navLinks = document.querySelectorAll('.nav-link');
 
   function showView(name) {
@@ -560,6 +560,7 @@ function initRouter() {
     if (name === 'list') startListPolling();
     else if (name === 'transfers') loadTransferHistory();
     else if (name === 'log') initLogSearch();
+    else if (name === 'account') loadAccountPage();
   }
 
   // Determine initial view from URL path
@@ -568,6 +569,7 @@ function initRouter() {
   if (path === '/list') initial = 'list';
   else if (path === '/transfers') initial = 'transfers';
   else if (path === '/log') initial = 'log';
+  else if (path === '/account') initial = 'account';
 
   // Nav link click handler
   navLinks.forEach(link => {
@@ -770,3 +772,94 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+// ─── Account Page ─────────────────────────────────────────────────────────────
+
+async function loadAccountPage() {
+  const emailVal = document.getElementById('account-email-val');
+  const expiryVal = document.getElementById('account-expiry-val');
+  const trafficVal = document.getElementById('account-traffic-val');
+  const profileVal = document.getElementById('account-profile-val');
+  const subtitle = document.getElementById('account-subtitle');
+
+  // Set loading state
+  if (emailVal) emailVal.textContent = 'Loading...';
+  if (expiryVal) expiryVal.textContent = 'Loading...';
+  if (trafficVal) trafficVal.textContent = 'Loading...';
+  if (profileVal) profileVal.textContent = 'Loading...';
+
+  // Fetch health for profile info
+  try {
+    const hRes = await fetch('/health');
+    const hData = await hRes.json();
+    if (hRes.ok && hData.status === 'ok') {
+      if (profileVal) profileVal.textContent = hData.profile || 'none';
+    }
+  } catch (_) {
+    if (profileVal) profileVal.textContent = 'Unavailable';
+  }
+
+  // Fetch account info
+  try {
+    const res = await fetch('/api/account');
+    const data = await res.json();
+    if (res.ok) {
+      if (emailVal) emailVal.textContent = data.username || 'Unknown';
+      if (expiryVal) expiryVal.textContent = data.days_left || 'Unknown';
+      if (trafficVal) trafficVal.textContent = data.status || 'Unlimited';
+      if (subtitle) subtitle.textContent = data.username ? `Logged in as ${data.username}` : 'MagicNZB account details';
+    } else {
+      const err = data.error || 'Could not fetch account info';
+      if (emailVal) emailVal.textContent = 'Error';
+      if (expiryVal) expiryVal.textContent = 'Error';
+      if (trafficVal) trafficVal.textContent = 'Error';
+      if (subtitle) subtitle.textContent = err;
+    }
+  } catch (e) {
+    if (emailVal) emailVal.textContent = 'Offline';
+    if (expiryVal) expiryVal.textContent = 'Offline';
+    if (trafficVal) trafficVal.textContent = 'Offline';
+    if (subtitle) subtitle.textContent = 'Could not connect';
+  }
+}
+
+async function renewAccount() {
+  const btn = document.getElementById('renew-btn');
+  const statusEl = document.getElementById('renew-status');
+  if (!btn) return;
+
+  btn.disabled = true;
+  btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Renewing...`;
+  btn.classList.add('renewing');
+  if (statusEl) { statusEl.textContent = ''; statusEl.className = 'renew-status'; }
+
+  try {
+    const res = await fetch('/api/account/renew', { method: 'POST' });
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Renewed!`;
+      btn.classList.remove('renewing');
+      btn.classList.add('renewed');
+      if (statusEl) {
+        statusEl.textContent = 'Free trial renewed successfully!';
+        statusEl.className = 'renew-status success';
+      }
+      // Refresh account data
+      setTimeout(() => loadAccountPage(), 1500);
+    } else {
+      throw new Error(data.error || 'Renewal failed');
+    }
+  } catch (e) {
+    if (statusEl) {
+      statusEl.textContent = e.message;
+      statusEl.className = 'renew-status error';
+    }
+  } finally {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.classList.remove('renewing', 'renewed');
+      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Renew Expiry`;
+    }, 3000);
+  }
+}

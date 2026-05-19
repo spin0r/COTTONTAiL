@@ -501,6 +501,43 @@ async function startWebServer(bot) {
     res.status(503).json({ error: "Account info not available" });
   });
 
+  // GET /api/account — fetch fresh account info
+  app.get("/api/account", async (req, res) => {
+    try {
+      const { MAGIC_COOKIES: getCookies } = require("./helpers");
+      const MagicClient = require("../client");
+      const client = new MagicClient(getCookies());
+      const info = await client.getAccountInfo();
+      if (info) {
+        Object.assign(_accountInfo, info);
+        res.json(info);
+      } else {
+        res.status(503).json({ error: "Could not fetch account info" });
+      }
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/account/renew — renew free trial
+  app.post("/api/account/renew", async (req, res) => {
+    try {
+      const { MAGIC_COOKIES: getCookies } = require("./helpers");
+      const MagicClient = require("../client");
+      const client = new MagicClient(getCookies());
+      const result = await client.renewFreeTrial();
+      if (result?.error) {
+        return res.status(502).json({ error: result.error });
+      }
+      // Refresh account info after renewal
+      const info = await client.getAccountInfo();
+      if (info) Object.assign(_accountInfo, info);
+      res.json({ success: true, result, account: info || _accountInfo });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ─── Transfers API ────────────────────────────────────────────────────────────
 
   // GET /api/transfers — fetch all transfers (running, queued, finished, error)
@@ -805,7 +842,7 @@ async function startWebServer(bot) {
 
   // ─── Frontend Route Aliases (SPA) ─────────────────────────────────────────────
 
-  app.get(["/transfers", "/list", "/log"], (req, res) => {
+  app.get(["/transfers", "/list", "/log", "/account"], (req, res) => {
     const htmlPath = path.join(STATIC_DIR, "upload.html");
     if (!fs.existsSync(htmlPath))
       return res.status(404).send("Page not found");

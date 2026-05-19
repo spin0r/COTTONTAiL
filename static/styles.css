@@ -263,6 +263,34 @@ body{font-family:var(--font);background:var(--bg);color:var(--fg);height:100vh;w
 .modal-btn.confirm{background:var(--fg);color:var(--bg)}
 .modal-btn.confirm:hover{opacity:0.9}
 
+/* === Account Page === */
+.account-page{max-width:720px}
+.account-cards-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:32px}
+.account-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;display:flex;flex-direction:column;gap:8px;transition:all 0.2s ease;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
+.account-card:hover{background:var(--surface-soft);border-color:rgba(255,255,255,0.14);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.2)}
+.account-card-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--accent-soft);color:var(--accent);margin-bottom:4px}
+.account-card-icon.expiry{background:rgba(250,204,21,0.12);color:#facc15}
+.account-card-icon.traffic{background:rgba(34,211,238,0.12);color:#22d3ee}
+.account-card-icon.profile{background:rgba(167,139,250,0.12);color:#a78bfa}
+.account-card-label{font-size:0.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:600}
+.account-card-value{font-size:1.1rem;font-weight:600;color:var(--fg);word-break:break-all;letter-spacing:-0.2px}
+.account-renew-section{margin-top:8px}
+.renew-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;display:flex;align-items:center;justify-content:space-between;gap:24px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
+.renew-card::before{content:'';position:absolute;inset:0;border-radius:var(--radius);padding:1px;background:linear-gradient(135deg,var(--accent-soft),rgba(167,139,250,0.15),transparent 60%);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+.renew-info h3{font-size:1.05rem;font-weight:600;color:var(--fg);margin-bottom:6px;letter-spacing:-0.2px}
+.renew-info p{font-size:0.85rem;color:var(--muted);line-height:1.5}
+.renew-btn{display:flex;align-items:center;gap:8px;padding:12px 24px;background:var(--fg);color:var(--bg);border:none;border-radius:14px;font-size:0.9rem;font-weight:600;cursor:pointer;transition:all 0.2s ease;font-family:var(--font);white-space:nowrap;flex-shrink:0}
+.renew-btn:hover{opacity:0.9;transform:scale(1.02)}
+.renew-btn:active{transform:scale(0.98)}
+.renew-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+.renew-btn.renewing{background:var(--surface-hover);color:var(--fg)}
+.renew-btn.renewing svg{animation:spin 1s linear infinite}
+.renew-btn.renewed{background:var(--success);color:#fff}
+.renew-status{margin-top:16px;font-size:0.85rem;text-align:center;padding:0 8px;font-weight:500;border-radius:var(--radius-sm);transition:all 0.3s ease}
+.renew-status:empty{display:none}
+.renew-status.success{color:var(--success);background:var(--success-soft);padding:12px;border:1px solid rgba(52,211,153,0.3)}
+.renew-status.error{color:var(--error);background:var(--error-soft);padding:12px;border:1px solid rgba(248,113,113,0.3)}
+
 /* === Responsive === */
 @media(max-width:768px){
   .top-nav{padding:0 12px}
@@ -275,4 +303,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--fg);height:100vh;w
   .resizer{display:none}
   .sidebar{width:100%!important;border-right:none;border-bottom:1px solid var(--border);max-height:50vh}
   .main-content{padding:24px}
+  .account-cards-grid{grid-template-columns:1fr}
+  .renew-card{flex-direction:column;text-align:center}
+  .renew-info{text-align:center}
 }
