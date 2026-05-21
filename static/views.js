@@ -12,7 +12,8 @@ const VICONS = {
   check: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
   spin: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>',
   edit: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-  save: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>'
+  save: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
+  wand: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8L19 13"/><path d="M15 9h.01"/><path d="M17.8 6.2L19 5"/><path d="M11 6.2L9.7 5"/><path d="M11 11.8l-1.3 1.2"/><path d="M3 21l9-9"/></svg>'
 };
 
 function fmtSize(b) {
@@ -368,6 +369,10 @@ async function doLogSearch(query) {
           </div>
         </div>
         <div class="li-actions">
+          <button class="sm-btn" title="AI Rename" onclick="aiRenameLog(${r.msg_id}, this)"
+            style="background:transparent;color:#a78bfa;padding:6px;min-width:auto">
+            ${VICONS.wand}
+          </button>
           <button class="sm-btn" title="Rename" onclick="startLogEdit(this, ${r.msg_id}, '${escHtml(name).replace(/'/g, "\\'")}')"
             style="background:transparent;color:var(--muted);padding:6px;min-width:auto">
             ${VICONS.edit}
@@ -506,6 +511,50 @@ async function deleteLogEntry(msgId, btn) {
     alert('Network error: ' + e.message);
     btn.innerHTML = VICONS.trash;
     btn.style.color = 'var(--muted)';
+  }
+}
+
+async function aiRenameLog(msgId, btn) {
+  const item = btn.closest('.log-item');
+  const nameEl = item.querySelector('.li-name');
+  const origIcon = btn.innerHTML;
+
+  btn.innerHTML = VICONS.spin;
+  btn.style.color = '#a78bfa';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(`/api/logs/${msgId}/ai-rename`, { method: 'POST' });
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      // Show success with the new name
+      btn.innerHTML = VICONS.check;
+      btn.style.color = '#4ade80';
+      if (nameEl) nameEl.textContent = data.new_name;
+
+      // Update the edit button's onclick so it uses the new name
+      const editBtn = item.querySelector('[title="Rename"]');
+      if (editBtn) {
+        const safeName = data.new_name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        editBtn.setAttribute('onclick', `startLogEdit(this, ${msgId}, '${safeName}')`);
+      }
+
+      // Reset icon after a moment
+      setTimeout(() => {
+        btn.innerHTML = origIcon;
+        btn.style.color = '#a78bfa';
+        btn.disabled = false;
+      }, 2000);
+    } else {
+      throw new Error(data.error || 'AI rename failed');
+    }
+  } catch (e) {
+    btn.innerHTML = origIcon;
+    btn.style.color = '#f87171';
+    btn.title = 'Failed: ' + e.message;
+    btn.disabled = false;
+    setTimeout(() => { btn.style.color = '#a78bfa'; btn.title = 'AI Rename'; }, 3000);
   }
 }
 

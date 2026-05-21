@@ -796,6 +796,81 @@ async function startWebServer(bot) {
     }
   });
 
+  // POST /api/logs/:msg_id/ai-rename — AI rename via external API + update DB & channel
+  app.post("/api/logs/:msg_id/ai-rename", async (req, res) => {
+    const msgId = parseInt(req.params.msg_id, 10);
+    if (isNaN(msgId)) {
+      return res.status(400).json({ error: "Invalid message ID" });
+    }
+
+    try {
+      const nzbDb = require("../nzb/db");
+      const { extractKeywords } = require("../nzb/utils");
+      const { LOG_GROUP_ID: logGroupId } = require("./helpers");
+      const { markDirty } = require("../nzb/backup");
+      const axios = require("axios");
+
+      const record = nzbDb.getByMsgId(msgId);
+      if (!record) {
+        return res.status(404).json({ error: "Log entry not found" });
+      }
+
+      const currentName = (record.caption?.trim()) || record.file_name || "";
+      if (!currentName) {
+        return res.status(400).json({ error: "No filename found for this entry" });
+      }
+
+      // Strip .nzb extension for AI input
+      const inputName = currentName.replace(/\.nzb$/i, "");
+
+      // Call the AI rename API
+      const aiRes = await axios.post(
+        "https://v2-vl42.onrender.com/api/ai-rename",
+        { text: inputName },
+        { headers: { "Content-Type": "application/json" }, timeout: 30000 }
+      );
+
+      if (!aiRes.data?.ok) {
+        return res.status(502).json({ error: aiRes.data?.error || "AI rename failed" });
+      }
+
+      let newName = aiRes.data.result.trim();
+      if (!newName.toLowerCase().endsWith(".nzb")) newName += ".nzb";
+
+      // Update local DB
+      const newKeywords = extractKeywords(newName, newName);
+      nzbDb.updateFile(msgId, newName, newKeywords);
+      markDirty();
+      try { require("../handlers/nzb").clearSearchCache(); } catch (_) {}
+
+      // Update Telegram channel caption
+      let telegramOk = false;
+      if (_bot && logGroupId && msgId > 0) {
+        try {
+          await _bot.api.editMessageCaption(logGroupId, msgId, {
+            caption: `<code>${newName}</code>`,
+            parse_mode: "HTML",
+          });
+          telegramOk = true;
+        } catch (e) {
+          console.error(`[AI-RENAME] Caption update failed (msg_id=${msgId}):`, e.message);
+        }
+      }
+
+      console.log(`[AI-RENAME] ${currentName} → ${newName}`);
+
+      res.json({
+        success: true,
+        old_name: currentName,
+        new_name: newName,
+        telegram_updated: telegramOk,
+      });
+    } catch (e) {
+      console.error("[AI-RENAME] Error:", e.message);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // DELETE /api/logs/:msg_id — delete a log entry from DB + Telegram log group
   app.delete("/api/logs/:msg_id", async (req, res) => {
     const msgId = parseInt(req.params.msg_id, 10);

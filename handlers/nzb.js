@@ -1,14 +1,17 @@
 /**
- * NZB Upload Logging, Search & Grab Handler
+ * NZB Upload Logging, Search, Grab & AI Rename Handler
  *
  * Handles:
  *   - Intercepting .nzb document uploads → forward to log channel + index in DB
  *   - /logs <query> command → FTS5 full-text search with paginated results
  *   - /grab_<msg_id> command → download NZB from log channel + upload to MagicNZB
+ *   - /rename_<msg_id> command → AI-rename via external API + update DB & channel
  *   - Pagination via inline buttons (same pattern as /transfers)
  */
 
 const axios = require("axios");
+
+const AI_RENAME_URL = "https://v2-vl42.onrender.com/api/ai-rename";
 const {
   restricted,
   LOG_GROUP_ID,
@@ -74,7 +77,7 @@ function generateLogsMessage(results, page = 1, header = null) {
     const name = escapeHtml(r.caption?.trim() || r.file_name || "untitled");
     const link = buildMsgLink(LOG_GROUP_ID, r.msg_id);
 
-    const itemText = `<b>${name}</b>\n${link} | /grab_${r.msg_id}\n\n`;
+    const itemText = `<b>${name}</b>\n${link} | /grab_${r.msg_id} | /rename_${r.msg_id}\n\n`;
 
     if (currentChars > 0 && currentChars + itemText.length > MAX_CHARS) {
       pages.push(header + currentPageItems.join(""));
@@ -303,6 +306,97 @@ const logsButtonHandler = restricted(async (ctx) => {
   } catch (_) {}
 });
 
+// ─── AI Rename Helper ─────────────────────────────────────────────────────────
+
+async function callAiRename(text) {
+  const res = await axios.post(
+    AI_RENAME_URL,
+    { text },
+    { headers: { "Content-Type": "application/json" }, timeout: 30000 }
+  );
+  if (!res.data?.ok) {
+    throw new Error(res.data?.error || "AI rename failed");
+  }
+  return res.data.result.trim();
+}
+
+// ─── AI Rename Command ───────────────────────────────────────────────────────
+// /rename_<msg_id> — calls AI rename API and updates DB + channel caption
+
+const aiRenameCommand = restricted(async (ctx) => {
+  const text = ctx.message?.text || "";
+  const match = text.match(/^\/rename_(\d+)$/);
+  if (!match) return;
+
+  const msgId = parseInt(match[1], 10);
+  const chatId = ctx.chat.id;
+
+  // Look up the file in DB
+  const record = db.getByMsgId(msgId);
+  if (!record) {
+    await ctx.reply(`No indexed file found for message ID ${msgId}.`);
+    return;
+  }
+
+  const currentName = record.caption?.trim() || record.file_name || "";
+  if (!currentName) {
+    await ctx.reply("Cannot rename — no filename found in DB.");
+    return;
+  }
+
+  // Strip .nzb extension for the AI rename input
+  const inputName = currentName.replace(/\.nzb$/i, "");
+
+  const statusMsg = await ctx.reply(
+    `🤖 AI Renaming:\n<code>${escapeHtml(currentName)}</code>\n\nCalling AI...`,
+    { parse_mode: "HTML" }
+  );
+
+  try {
+    const aiResult = await callAiRename(inputName);
+
+    // Append .nzb extension to AI result
+    const newName = aiResult.toLowerCase().endsWith(".nzb")
+      ? aiResult
+      : aiResult + ".nzb";
+
+    // Update the local DB
+    const keywords = extractKeywords(newName, newName);
+    db.updateFile(msgId, newName, keywords);
+    markDirty();
+    clearSearchCache();
+
+    // Update the Telegram channel caption
+    try {
+      await ctx.api.editMessageCaption(LOG_GROUP_ID, msgId, {
+        caption: `<code>${escapeHtml(newName)}</code>`,
+        parse_mode: "HTML",
+      });
+    } catch (captionErr) {
+      console.error(`[AI-RENAME] Caption update failed for msg ${msgId}:`, captionErr.message);
+    }
+
+    await ctx.api.editMessageText(
+      chatId,
+      statusMsg.message_id,
+      `🤖 AI Renamed:\n\n` +
+        `<b>Before:</b>\n<code>${escapeHtml(currentName)}</code>\n\n` +
+        `<b>After:</b>\n<code>${escapeHtml(newName)}</code>`,
+      { parse_mode: "HTML" }
+    );
+  } catch (e) {
+    console.error("[AI-RENAME] Error:", e.message);
+    try {
+      await ctx.api.editMessageText(
+        chatId,
+        statusMsg.message_id,
+        `❌ AI Rename failed: ${escapeHtml(e.message.slice(0, 120))}`,
+        { parse_mode: "HTML" }
+      );
+    } catch (_) {}
+  }
+});
+
 // ─── Grab Command ─────────────────────────────────────────────────────────────
 // /grab_<msg_id> — downloads NZB from log channel and uploads to MagicNZB
 
@@ -433,5 +527,6 @@ module.exports = {
   nzbStatsCommand,
   logsButtonHandler,
   grabNzbCommand,
+  aiRenameCommand,
   clearSearchCache,
 };

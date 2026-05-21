@@ -49,6 +49,7 @@ const {
   nzbStatsCommand,
   logsButtonHandler,
   grabNzbCommand,
+  aiRenameCommand,
 } = require("./handlers/nzb");
 
 async function main() {
@@ -104,6 +105,7 @@ async function main() {
   bot.hears(/^\/upload_\d+$/, handleUploadCommand);
   bot.hears(/^\/del_\d+$/, handleDelCommand);
   bot.hears(/^\/grab_\d+$/, grabNzbCommand);
+  bot.hears(/^\/rename_\d+$/, aiRenameCommand);
 
   // Document handler — intercept NZB files first, then fall through
   bot.on("message:document", async (ctx) => {
