@@ -47,7 +47,6 @@ export async function renderTransfers(container: HTMLElement) {
               <tr>
                 <th>Name</th>
                 <th style="width:80px;white-space:nowrap">Status</th>
-                <th style="width:140px;white-space:nowrap">Progress</th>
                 <th style="width:70px;white-space:nowrap">Actions</th>
               </tr>
             </thead>
@@ -185,23 +184,6 @@ function renderTable() {
     else if (t.status === 'finished') statusClass = 'badge-finished';
     else statusClass = 'badge-error';
 
-    let progressHtml = '';
-    if (t.progress !== undefined && t.progress !== null) {
-      let pct = 0;
-      if (typeof t.progress === 'string') pct = parseFloat(t.progress) || 0;
-      else pct = typeof t.progress === 'number' ? t.progress : 0;
-      if (isNaN(pct)) pct = 0;
-      
-      progressHtml = `
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:11px;width:32px;text-align:right">${pct.toFixed(0)}%</span>
-          <div class="progress-bar" style="flex:1">
-            <div class="progress-fill" style="width:${Math.min(100, Math.max(0, pct))}%"></div>
-          </div>
-        </div>
-      `;
-    }
-
     const message = t.message ? `<div style="font-size:10px;color:var(--fg-3);margin-top:4px">${t.message}</div>` : '';
 
     return `
@@ -211,7 +193,6 @@ function renderTable() {
           ${message}
         </td>
         <td><span class="badge ${statusClass}">${badgeText}</span></td>
-        <td style="min-width:120px">${progressHtml}</td>
         <td>
           <div class="cell-actions">
             ${t.status === 'finished' ? `<button class="btn-icon btn-view" data-id="${t.id}" title="View Contents">${iconEye()}</button>` : ''}
