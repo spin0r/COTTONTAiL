@@ -186,8 +186,20 @@ function renderTable() {
 
     const message = t.message ? `<div style="font-size:10px;color:var(--fg-3);margin-top:4px">${t.message}</div>` : '';
 
+    // Progress as row background fill
+    let pct = 0;
+    if (t.progress !== undefined && t.progress !== null) {
+      pct = typeof t.progress === 'string' ? parseFloat(t.progress) || 0 : (typeof t.progress === 'number' ? t.progress : 0);
+      if (pct > 1) pct = pct / 100; // normalise if already 0–100
+      pct = Math.min(1, Math.max(0, isNaN(pct) ? 0 : pct));
+    }
+    const isRunning = t.status === 'running' || t.status === 'downloading' || t.status === 'extracting';
+    const rowStyle = isRunning && pct > 0
+      ? `style="background: linear-gradient(to right, rgba(255,255,255,0.06) ${pct*100}%, transparent ${pct*100}%);"`
+      : '';
+
     return `
-      <tr>
+      <tr ${rowStyle}>
         <td>
           <div class="cell-name ${t.status === 'finished' ? 'cell-name-link' : ''}" title="${t.name || ''}" ${t.status === 'finished' ? `data-view-id="${t.id}"` : ''}>${t.name || 'Unknown'}</div>
           ${message}
