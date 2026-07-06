@@ -1,6 +1,6 @@
 import { api } from '../api.ts';
 import type { Transfer, TransfersData } from '../api.ts';
-import { iconRefresh, iconTrash, iconEye, iconX, iconFolder, iconFile, iconActivity, iconFileType } from '../icons.ts';
+import { iconRefresh, iconTrash, iconEye, iconX, iconFolder, iconFile, iconActivity, iconFileType, iconSearch } from '../icons.ts';
 import { fmtSize } from '../api.ts';
 
 let interval: ReturnType<typeof setInterval> | undefined;
@@ -8,6 +8,7 @@ let isAutoRefresh = true;
 let currentTab: 'all' | 'running' | 'queued' | 'finished' | 'error' = 'all';
 let transfersData: TransfersData = { running: [], queued: [], finished: [], error: [] };
 let mainContainer: HTMLElement | null = null;
+let currentSearch = '';
 
 export function cleanupTransfers() {
   if (interval) {
@@ -37,8 +38,13 @@ export async function renderTransfers(container: HTMLElement) {
           <button class="btn btn-icon" id="refresh-btn" title="Refresh">${iconRefresh()}</button>
         </div>
       </div>
-      
-      <div id="stats-container"></div>
+
+      <div class="search-wrap">
+        ${iconSearch()}
+        <input type="text" class="search-input" id="transfers-search" placeholder="Search transfers...">
+        <div class="search-count" id="transfers-search-count"></div>
+      </div>
+
       <div class="tab-bar" id="tab-bar"></div>
       <div class="card" style="padding:0">
         <div class="table-wrap">
@@ -74,43 +80,11 @@ async function loadData() {
   if (!mainContainer) return;
   try {
     transfersData = await api.transfers();
-    renderStats();
     renderTabs();
     renderTable();
   } catch (err: any) {
     (window as any).showToast(err.message || 'Failed to load transfers', 'error');
   }
-}
-
-function renderStats() {
-  if (!mainContainer) return;
-  const runningCount = transfersData.running?.length || 0;
-  const queuedCount = transfersData.queued?.length || 0;
-  const finishedCount = transfersData.finished?.length || 0;
-  const errorCount = transfersData.error?.length || 0;
-
-  const html = `
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-value">${runningCount}</div>
-        <div class="stat-label">Running</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">${queuedCount}</div>
-        <div class="stat-label">Queued</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">${finishedCount}</div>
-        <div class="stat-label">Finished</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">${errorCount}</div>
-        <div class="stat-label">Error</div>
-      </div>
-    </div>
-  `;
-  const statsEl = mainContainer.querySelector('#stats-container');
-  if (statsEl) statsEl.innerHTML = html;
 }
 
 function renderTabs() {
@@ -153,6 +127,24 @@ function renderTable() {
   } else {
     list = transfersData[currentTab] || [];
   }
+
+  // Apply search filter — same logic as logs: split on separators, match all tokens
+  if (currentSearch.trim()) {
+    const tokens = currentSearch
+      .replace(/[._\-\[\](){}]/g, ' ')
+      .split(/\s+/)
+      .map(t => t.toLowerCase())
+      .filter(t => t.length >= 1);
+    if (tokens.length) {
+      list = list.filter(t => {
+        const name = (t.name || '').toLowerCase().replace(/[._\-\[\](){}]/g, ' ');
+        return tokens.every(tok => name.includes(tok));
+      });
+    }
+  }
+
+  const countEl = mainContainer.querySelector('#transfers-search-count');
+  if (countEl) countEl.textContent = `${list.length} result${list.length !== 1 ? 's' : ''}`;
 
   const tbody = mainContainer.querySelector('#transfers-tbody');
   const empty = mainContainer.querySelector('#transfers-empty') as HTMLElement;
@@ -228,6 +220,12 @@ function attachEvents() {
 
   mainContainer.querySelector('#refresh-btn')?.addEventListener('click', () => {
     loadData();
+  });
+
+  const searchInput = mainContainer.querySelector('#transfers-search') as HTMLInputElement;
+  searchInput?.addEventListener('input', () => {
+    currentSearch = searchInput.value;
+    renderTable();
   });
 
   mainContainer.addEventListener('click', async (e) => {
