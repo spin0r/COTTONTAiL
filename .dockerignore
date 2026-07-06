@@ -1,5 +1,13 @@
-__pycache__
+node_modules
+frontend/node_modules
+dist
+frontend/dist
 .env
+auth.json
+*.db
+*.db-shm
+*.db-wal
+nzb_downloads
+temp_zip_uploads
 .git
 .gitignore
-*.pyc

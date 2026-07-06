@@ -2,12 +2,22 @@ FROM node:20-slim
 
 WORKDIR /app
 
+# Install root deps
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
+# Install frontend deps
+COPY frontend/package*.json ./frontend/
+RUN cd frontend && npm ci
+
+# Copy source
 COPY . .
 
-RUN mkdir -p nzb_downloads temp_zip_uploads static
+# Build frontend then compile TypeScript
+RUN npm run build
+
+# Remove dev dependencies after build
+RUN npm prune --omit=dev
 
 ENV TELEGRAM_TOKEN=""
 ENV TELEGRAPH_TOKEN=""
@@ -18,6 +28,8 @@ ENV COOKIE_API_SECRET=""
 ENV DOWNLOAD_DIR="nzb_downloads"
 ENV PORT=10000
 
+RUN mkdir -p nzb_downloads temp_zip_uploads
+
 EXPOSE 10000
 
-CMD ["node", "bot.js"]
+CMD ["node", "dist/index.js"]
