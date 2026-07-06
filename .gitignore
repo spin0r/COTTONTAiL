@@ -1,45 +1,47 @@
-# Dependencies
+# ─── Dependencies ────────────────────────────────────────────────
 node_modules/
+frontend/node_modules/
 
-# Environment
+# ─── Build output ────────────────────────────────────────────────
+dist/
+frontend/dist/
+
+# ─── Environment ─────────────────────────────────────────────────
 .env
 .env.*
 !.env.example
 
-# Runtime data
+# ─── Auth & sessions ─────────────────────────────────────────────
+auth.json
+*.session
+
+# ─── Runtime data ────────────────────────────────────────────────
 nzb_downloads/
 temp_zip_uploads/
 approved_users.json
 message_cleaner_state.json
 
-# Logs
-*.log
-logs/
-
-# Archives
-*.zip
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Editor
-.vscode/
-.idea/
-
-# Python (legacy)
-__pycache__/
-*.pyc
-*.pyo
-
-# SQLite
+# ─── Database ────────────────────────────────────────────────────
 *.db
 *.db-shm
 *.db-wal
-nzb_index.db
-nzb_index_backup.db
 
-# MTProto sessions
-*.session
-auth.json
-nzb/mass-rename.js
+# ─── Logs ────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── Archives ────────────────────────────────────────────────────
+*.zip
+
+# ─── OS ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Editor ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+
+# ─── Python (legacy) ─────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
