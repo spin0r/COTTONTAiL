@@ -2,6 +2,7 @@ import "dotenv/config";
 import { Bot, session, Context, SessionFlavor } from "grammy";
 import { TELEGRAM_TOKEN } from "./config";
 import { startWebServer } from "./utils/server";
+import { log } from "./utils/logger";
 import * as nzbDb from "./nzb/db";
 import { startBackupScheduler, autoRestore } from "./nzb/backup";
 import type { BotSession } from "./types";
@@ -42,7 +43,7 @@ async function main(): Promise<void> {
   await autoRestore();
 
   nzbDb.init();
-  console.log(`[NZB-DB] ${nzbDb.getCount()} files indexed.`);
+  log.db(`${nzbDb.getCount().toLocaleString()} files indexed`);
 
   const bot = new Bot<MyContext>(token);
 
@@ -110,7 +111,7 @@ async function main(): Promise<void> {
 
   startBackupScheduler();
 
-  console.log("Bot is running...");
+  log.bot("Running — waiting for messages");
   bot.start();
 }
 

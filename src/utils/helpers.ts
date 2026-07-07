@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { log } from "./logger";
 import fs from "fs";
 import path from "path";
 import axios from "axios";
@@ -49,7 +50,7 @@ function loadApprovedUsers(): void {
       APPROVED_USERS = new Set(data.approved_users ?? []);
     }
   } catch (e: any) {
-    console.error("Failed to load approved users:", e.message);
+    log.error("AUTH", `Failed to load approved users — ${e.message}`);
     APPROVED_USERS = new Set();
   }
 }
@@ -61,7 +62,7 @@ function saveApprovedUsers(): void {
       JSON.stringify({ approved_users: [...APPROVED_USERS] }, null, 2)
     );
   } catch (e: any) {
-    console.error("Failed to save approved users:", e.message);
+    log.error("AUTH", `Failed to save approved users — ${e.message}`);
   }
 }
 
@@ -193,10 +194,10 @@ export async function fetchMagicCookies(name: string | null = null): Promise<boo
       client.updateCookies(MAGIC_COOKIES);
     }
     (Object.keys(USER_CLIENTS) as unknown as number[]).forEach((k) => delete USER_CLIENTS[k as number]);
-    console.log(`Fetched MagicNZB cookies (profile: ${profileName})`);
+    log.success("COOKIES", `Fetched profile: ${profileName}`);
     return true;
   } catch (e: any) {
-    console.error("Error fetching cookies:", e.message);
+    log.error("COOKIES", `Fetch failed — ${e.message}`);
     return false;
   }
 }
@@ -207,7 +208,7 @@ export async function fetchProfileCookies(name: string): Promise<string | null> 
     const res = await axios.get(targetUrl, { headers: _apiHeaders(), timeout: 15000 });
     return (typeof res.data === "string" ? res.data : JSON.stringify(res.data)).trim();
   } catch (e: any) {
-    console.error(`Error fetching cookies for ${name}:`, e.message);
+    log.error("COOKIES", `Fetch failed for ${name} — ${e.message}`);
     return null;
   }
 }
@@ -315,3 +316,4 @@ export const getActiveAccountEmail = (): string => ACTIVE_ACCOUNT_EMAIL;
 export const getActiveAccountExpiry = (): string => ACTIVE_ACCOUNT_EXPIRY;
 export const getActiveAccountTraffic = (): string => ACTIVE_ACCOUNT_TRAFFIC;
 export const setMagicCookies = (v: string): void => { MAGIC_COOKIES = v; };
+

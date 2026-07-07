@@ -5,6 +5,7 @@ import Database from "better-sqlite3";
 import "dotenv/config";
 import * as db from "./db";
 import type { BackupInfo } from "../types";
+import { log } from "../utils/logger";
 
 const DROPBOX_REFRESH_TOKEN = process.env.DROPBOX_REFRESH_TOKEN ?? "";
 const DROPBOX_APP_KEY = process.env.DROPBOX_APP_KEY ?? "";
@@ -53,7 +54,7 @@ async function getAccessToken(): Promise<string> {
 
   cachedAccessToken = data.access_token as string;
   tokenExpiresAt = Date.now() + ((data.expires_in as number) || 14400) * 1000;
-  console.log(`[NZB-BACKUP] Dropbox token refreshed, expires in ${data.expires_in || 14400}s`);
+  log.backup(`Dropbox token refreshed (expires in ${data.expires_in || 14400}s)`);
   return cachedAccessToken;
 }
 
@@ -62,7 +63,7 @@ async function createBackup(): Promise<string> {
   if (!source) throw new Error("Database not initialized");
   await source.backup(BACKUP_FILE);
   const size = fs.statSync(BACKUP_FILE).size;
-  console.log(`[NZB-BACKUP] DB backed up to ${BACKUP_FILE} (${(size / 1048576).toFixed(2)} MB)`);
+  log.backup(`DB snapshot created — ${(size / 1048576).toFixed(2)} MB`);
   return BACKUP_FILE;
 }
 
@@ -77,7 +78,7 @@ async function pushToDropbox(filePath: string): Promise<void> {
   });
 
   const sizeMB = ((data.size || 0) / 1048576).toFixed(2);
-  console.log(`[NZB-BACKUP] Pushed to Dropbox: ${data.path_display} (${sizeMB} MB, rev: ${data.rev})`);
+  log.backup(`Pushed to Dropbox — ${data.path_display} (${sizeMB} MB, rev: ${data.rev})`);
 }
 
 export async function restoreFromDropbox(): Promise<string | null> {
@@ -96,10 +97,10 @@ export async function restoreFromDropbox(): Promise<string | null> {
     for (const suffix of ["-wal", "-shm"]) { try { fs.unlinkSync(restorePath + suffix); } catch (_) {} }
     fs.writeFileSync(restorePath, Buffer.from(data as ArrayBuffer));
     const sizeMB = ((data as ArrayBuffer).byteLength / 1048576).toFixed(2);
-    console.log(`[NZB-BACKUP] Restored from Dropbox → ${restorePath} (${sizeMB} MB)`);
+    log.backup(`Restored from Dropbox → ${restorePath} (${sizeMB} MB)`);
     return restorePath;
   } catch (e: any) {
-    if (e.response?.status === 409) { console.log("[NZB-BACKUP] No backup found on Dropbox."); return null; }
+    if (e.response?.status === 409) { log.warn("BACKUP", "No backup found on Dropbox"); return null; }
     throw e;
   }
 }
@@ -126,11 +127,11 @@ export async function getBackupInfo(): Promise<BackupInfo | null> {
 }
 
 export async function runBackup(force = false): Promise<void> {
-  if (isBackingUp) { console.log("[NZB-BACKUP] Backup already in progress, skipping."); return; }
+  if (isBackingUp) { log.warn("BACKUP", "Backup already in progress — skipping"); return; }
   if (!force) {
     const elapsed = Date.now() - lastBackupAt;
     if (elapsed < MIN_BACKUP_INTERVAL) {
-      console.log(`[NZB-BACKUP] Cooldown active, next backup in ${Math.ceil((MIN_BACKUP_INTERVAL - elapsed) / 1000)}s`);
+      log.warn("BACKUP", `Cooldown active — next backup in ${Math.ceil((MIN_BACKUP_INTERVAL - elapsed) / 1000)}s`);
       return;
     }
   }
@@ -141,10 +142,10 @@ export async function runBackup(force = false): Promise<void> {
     lastDbHash = getDbFingerprint();
     lastBackupAt = Date.now();
     try { fs.unlinkSync(backupPath); } catch (_) {}
-    console.log("[NZB-BACKUP] Backup cycle complete.");
+    log.success("BACKUP", "Cycle complete ✓");
   } catch (e: any) {
     const detail = e.response?.data ? (typeof e.response.data === "string" ? e.response.data : JSON.stringify(e.response.data)) : e.message;
-    console.error("[NZB-BACKUP] Backup failed:", detail);
+    log.error("BACKUP", `Failed — ${detail}`);
   } finally {
     isBackingUp = false;
   }
@@ -153,7 +154,7 @@ export async function runBackup(force = false): Promise<void> {
 async function checkAndBackup(): Promise<void> {
   if (dirtyTimer) return;
   if (!hasDbChanged()) return;
-  console.log("[NZB-BACKUP] DB change detected, starting backup...");
+  log.backup("DB change detected — syncing...");
   await runBackup();
 }
 
@@ -183,18 +184,18 @@ export async function autoRestore(): Promise<void> {
     } catch (_) {
       localExists = false;
       localCount = 0;
-      console.log("[NZB-BACKUP] Local DB appears corrupt, will restore from Dropbox.");
+      log.warn("BACKUP", "Local DB appears corrupt — restoring from Dropbox");
     }
   }
 
   if (!localExists) {
-    console.log("[NZB-BACKUP] Local DB missing or empty, will restore from Dropbox.");
+    log.warn("BACKUP", "Local DB missing — restoring from Dropbox");
     try {
       const result = await restoreFromDropbox();
-      if (result) { console.log("[NZB-BACKUP] Auto-restore complete."); }
-      else { console.log("[NZB-BACKUP] No remote backup to restore — starting fresh."); }
+      if (result) { log.success("BACKUP", "Auto-restore complete ✓"); }
+      else { log.warn("BACKUP", "No remote backup found — starting fresh"); }
     } catch (e: any) {
-      console.error("[NZB-BACKUP] Auto-restore failed:", e.message);
+      log.error("BACKUP", `Auto-restore failed — ${e.message}`);
     }
     return;
   }
@@ -202,9 +203,9 @@ export async function autoRestore(): Promise<void> {
   const tempDbPath = path.join(__dirname, "..", "..", "nzb_index_remote_tmp.db");
   try {
     const remoteInfo = await getBackupInfo();
-    if (!remoteInfo) { console.log("[NZB-BACKUP] No remote backup on Dropbox — keeping local DB."); return; }
+    if (!remoteInfo) { log.warn("BACKUP", "No remote backup on Dropbox — keeping local DB"); return; }
 
-    console.log(`[NZB-BACKUP] Local DB: ${localCount} rows, ${(localSize / 1048576).toFixed(2)} MB | Dropbox: ${remoteInfo.sizeMB} MB, modified ${remoteInfo.modified}`);
+    log.backup(`Comparing — local: ${localCount} rows (${(localSize / 1048576).toFixed(2)} MB) | Dropbox: ${remoteInfo.sizeMB} MB, modified ${remoteInfo.modified}`);
 
     const token = await getAccessToken();
     const { data: remoteData } = await axios.post(
@@ -226,46 +227,45 @@ export async function autoRestore(): Promise<void> {
       remoteCount = row ? row.cnt : 0;
       tempDb.close();
     } catch (dbErr: any) {
-      console.error("[NZB-BACKUP] Failed to read remote DB row count:", dbErr.message);
+      log.error("BACKUP", `Failed to read remote DB — ${dbErr.message}`);
       try { fs.unlinkSync(tempDbPath); } catch (_) {}
       return;
     }
 
-    console.log(`[NZB-BACKUP] Row comparison — local: ${localCount}, remote: ${remoteCount}`);
+    log.backup(`Rows — local: ${localCount}, remote: ${remoteCount}`);
 
     if (remoteCount > localCount) {
-      console.log(`[NZB-BACKUP] Dropbox has more rows (${remoteCount} vs ${localCount}) — restoring remote copy.`);
+      log.warn("BACKUP", `Dropbox is ahead (${remoteCount} vs ${localCount}) — restoring`);
       db.close();
       const restorePath = db.getDbPath();
       for (const suffix of ["-wal", "-shm"]) { try { fs.unlinkSync(restorePath + suffix); } catch (_) {} }
       fs.renameSync(tempDbPath, restorePath);
       const sizeMB = ((remoteData as ArrayBuffer).byteLength / 1048576).toFixed(2);
-      console.log(`[NZB-BACKUP] Restored from Dropbox → ${restorePath} (${sizeMB} MB)`);
       db.init();
-      console.log(`[NZB-BACKUP] Restored from Dropbox: ${db.getCount()} rows (was ${localCount}).`);
+      log.success("BACKUP", `Restored from Dropbox — ${db.getCount()} rows, ${sizeMB} MB ✓`);
     } else {
-      console.log("[NZB-BACKUP] Local DB is up to date — no restore needed.");
+      log.success("BACKUP", "Local DB is up to date — no restore needed ✓");
       try { fs.unlinkSync(tempDbPath); } catch (_) {}
     }
   } catch (e: any) {
-    console.error("[NZB-BACKUP] Dropbox comparison failed:", e.message);
+    log.error("BACKUP", `Dropbox comparison failed — ${e.message}`);
     try { fs.unlinkSync(tempDbPath); } catch (_) {}
   }
 }
 
 export function startBackupScheduler(): void {
   if (!isConfigured()) {
-    console.log("[NZB-BACKUP] Backup disabled — set DROPBOX_REFRESH_TOKEN, DROPBOX_APP_KEY, and DROPBOX_APP_SECRET in .env");
+    log.warn("BACKUP", "Disabled — set DROPBOX_REFRESH_TOKEN, DROPBOX_APP_KEY, DROPBOX_APP_SECRET in .env");
     return;
   }
-  console.log("[NZB-BACKUP] Scheduler started (Dropbox) — checking every 5 min");
+  log.backup("Scheduler started — checking every 5 min");
   lastDbHash = getDbFingerprint();
   setTimeout(() => { runBackup(); }, 30_000);
   backupTimer = setInterval(checkAndBackup, CHECK_INTERVAL_MS);
 }
 
 export function stopBackupScheduler(): void {
-  if (backupTimer) { clearInterval(backupTimer); backupTimer = null; console.log("[NZB-BACKUP] Scheduler stopped."); }
+  if (backupTimer) { clearInterval(backupTimer); backupTimer = null; log.backup("Scheduler stopped"); }
   if (dirtyTimer) { clearTimeout(dirtyTimer); dirtyTimer = null; }
 }
 
@@ -274,7 +274,7 @@ export function markDirty(): void {
   if (dirtyTimer) clearTimeout(dirtyTimer);
   dirtyTimer = setTimeout(async () => {
     dirtyTimer = null;
-    console.log("[NZB-BACKUP] Dirty flag — syncing to Dropbox...");
+    log.backup("Dirty flag — syncing to Dropbox...");
     await runBackup();
   }, DIRTY_DEBOUNCE_MS);
 }

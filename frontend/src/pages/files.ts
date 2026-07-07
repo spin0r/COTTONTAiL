@@ -6,6 +6,9 @@ let filesData: FileEntry[] = [];
 let mainContainer: HTMLElement | null = null;
 let uploadsInProgress = 0;
 
+// Per-filename thumbnail URL set before upload
+const pendingThumbs = new Map<string, string>();
+
 export function cleanupFiles() {
   // Don't null mainContainer — preserve DOM to avoid flicker on revisit
 }
@@ -92,7 +95,9 @@ function renderTable() {
   tableWrap.style.display = 'block';
   empty.style.display = 'none';
 
-  tbody.innerHTML = filesData.map(f => `
+  tbody.innerHTML = filesData.map(f => {
+    const savedThumb = pendingThumbs.get(f.name) || '';
+    return `
     <tr data-name="${f.name}">
       <td>
         <div class="cell-name filename-display">${f.name}</div>
@@ -100,6 +105,9 @@ function renderTable() {
           <input type="text" class="inline-rename" value="${f.name}">
           <button class="btn-icon btn-rename-save" style="color:var(--success)">${iconCheck()}</button>
           <button class="btn-icon btn-rename-cancel">${iconX()}</button>
+        </div>
+        <div class="file-thumb-url-row">
+          <input type="url" class="file-thumb-input search-input" placeholder="Thumbnail URL (optional)" value="${savedThumb}" style="font-size:11px;height:26px;padding:3px 8px">
         </div>
       </td>
       <td class="cell-mono">${fmtSize(f.size)}</td>
@@ -116,7 +124,7 @@ function renderTable() {
         </div>
       </td>
     </tr>
-  `).join('');
+  `}).join('');
 }
 
 function attachEvents() {
@@ -133,6 +141,24 @@ function attachEvents() {
         (window as any).showToast(err.message, 'error');
       }
     }
+  });
+
+  // Thumbnail URL clear button
+  mainContainer.querySelector('#thumb-url-clear')?.addEventListener('click', () => {
+    const input = mainContainer?.querySelector('#thumb-url-input') as HTMLInputElement;
+    if (input) input.value = '';
+    pendingThumbs.clear();
+  });
+
+  // Per-row thumbnail URL input — persist to map so value survives table re-render
+  mainContainer.addEventListener('input', (e) => {
+    const input = (e.target as HTMLElement).closest('.file-thumb-input') as HTMLInputElement | null;
+    if (!input) return;
+    const tr = input.closest('tr') as HTMLElement | null;
+    const name = tr?.getAttribute('data-name');
+    if (!name) return;
+    if (input.value.trim()) pendingThumbs.set(name, input.value.trim());
+    else pendingThumbs.delete(name);
   });
 
   // Drag and Drop
@@ -221,7 +247,15 @@ function attachEvents() {
 
     // Upload Log
     if (target.closest('.btn-log')) {
-      await performRowAction(tr, name, 'log');
+      // Read per-row thumbnail URL input
+      const thumbInput = tr.querySelector('.file-thumb-input') as HTMLInputElement;
+      const thumbUrl = thumbInput?.value.trim() || pendingThumbs.get(name) || '';
+      if (thumbUrl) {
+        pendingThumbs.delete(name);
+        await performRowAction(tr, name, 'log', thumbUrl);
+      } else {
+        showSendToLogModal(tr, name);
+      }
       return;
     }
   });
@@ -251,34 +285,116 @@ async function saveRename(tr: HTMLElement, oldName: string) {
 
   try {
     await api.renameFile(oldName, newName);
-    loadData();
+
+    // Update in-place
+    const nameDisplay = tr.querySelector('.cell-name.filename-display') as HTMLElement;
+    if (nameDisplay) nameDisplay.textContent = newName;
+    input.value = newName;
+    tr.setAttribute('data-name', newName);
+
+    // Update pending thumbs key if it existed
+    if (pendingThumbs.has(oldName)) {
+      pendingThumbs.set(newName, pendingThumbs.get(oldName)!);
+      pendingThumbs.delete(oldName);
+    }
+
+    // Collapse edit UI back to display
+    (tr.querySelector('.filename-display') as HTMLElement).style.display = 'block';
+    (tr.querySelector('.filename-edit') as HTMLElement).style.display = 'none';
+
+    (window as any).showToast(`Renamed to: ${newName}`, 'success');
   } catch (err: any) {
     (window as any).showToast(err.message, 'error');
   }
 }
 
-async function performRowAction(tr: HTMLElement, name: string, type: 'magic' | 'log') {
+async function performRowAction(tr: HTMLElement, name: string, type: 'magic' | 'log', imageUrl?: string) {
   const actionsEl = tr.querySelector('.action-buttons') as HTMLElement;
   const loadingEl = tr.querySelector('.action-loading') as HTMLElement;
-  
+
   actionsEl.style.display = 'none';
   loadingEl.style.display = 'flex';
 
+  // If no imageUrl passed in, read from the per-row input
+  const thumbInput = tr.querySelector('.file-thumb-input') as HTMLInputElement | null;
+  const thumbUrl = imageUrl || thumbInput?.value.trim() || pendingThumbs.get(name) || '';
+
   try {
+    let msgId = 0;
+
     if (type === 'magic') {
-      await api.uploadToMagic(name);
+      const res = await api.uploadToMagic(name);
+      msgId = (res as any)?.msg_id ?? 0;
       (window as any).showToast(`Uploaded ${name} to MagicNZB`, 'success');
     } else {
-      await api.uploadToLog(name);
+      const res = await api.uploadToLog(name);
+      msgId = (res as any)?.msg_id ?? 0;
       (window as any).showToast(`Sent ${name} to Telegram Log`, 'success');
     }
-    // Delete file locally after successful upload? Depends on backend behavior, but let's reload anyway
+
+    // Save thumbnail for both actions if URL provided and msg_id valid
+    if (thumbUrl && msgId > 0) {
+      try {
+        await api.setCustomThumbnail(msgId, thumbUrl);
+        (window as any).showToast('Thumbnail saved', 'success');
+        pendingThumbs.delete(name);
+        if (thumbInput) thumbInput.value = '';
+      } catch (thumbErr: any) {
+        (window as any).showToast(`Thumbnail failed: ${thumbErr.message}`, 'error');
+      }
+    }
+
     loadData();
   } catch (err: any) {
     (window as any).showToast(err.message, 'error');
     actionsEl.style.display = 'flex';
     loadingEl.style.display = 'none';
   }
+}
+
+function showSendToLogModal(tr: HTMLElement, name: string) {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <div class="modal-title">Send to Telegram Log</div>
+        <button class="modal-close" id="stl-close">${iconX()}</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <div style="font-size:12px;color:var(--fg-2);word-break:break-all">${name}</div>
+        <div>
+          <label style="font-size:11px;color:var(--fg-3);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">
+            Custom Thumbnail URL <span style="color:var(--fg-3)">(optional)</span>
+          </label>
+          <input
+            id="stl-img-url"
+            type="url"
+            class="search-input"
+            style="width:100%"
+            placeholder="https://example.com/poster.jpg"
+          >
+          <div style="font-size:11px;color:var(--fg-3);margin-top:4px">Paste a direct image URL — it will be downloaded and stored permanently.</div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-ghost" id="stl-cancel">Cancel</button>
+          <button class="btn btn-primary" id="stl-confirm">Send to Log</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const close = () => modal.remove();
+  modal.querySelector('#stl-close')?.addEventListener('click', close);
+  modal.querySelector('#stl-cancel')?.addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+  modal.querySelector('#stl-confirm')?.addEventListener('click', async () => {
+    const imgUrl = (modal.querySelector('#stl-img-url') as HTMLInputElement).value.trim();
+    close();
+    await performRowAction(tr, name, 'log', imgUrl || undefined);
+  });
 }
 
 async function handleFiles(files: File[]) {
@@ -293,7 +409,10 @@ async function handleFiles(files: File[]) {
 
   for (const file of nzbFiles) {
     const id = 'up-' + Math.random().toString(36).substr(2, 9);
-    
+
+    // Capture thumbnail URL at time of upload start
+    const thumbUrl = pendingThumbs.get(file.name) || '';
+
     const ui = document.createElement('div');
     ui.className = 'upload-progress';
     ui.id = id;
@@ -309,7 +428,7 @@ async function handleFiles(files: File[]) {
     queueEl.appendChild(ui);
 
     uploadsInProgress++;
-    
+
     try {
       await uploadFile(file, (pct) => {
         const fill = ui.querySelector('.upload-progress-fill') as HTMLElement;
@@ -325,7 +444,7 @@ async function handleFiles(files: File[]) {
       (window as any).showToast(`Failed to upload ${file.name}: ${err.message}`, 'error');
       setTimeout(() => ui.remove(), 4000);
     }
-    
+
     uploadsInProgress--;
     if (uploadsInProgress === 0) {
       loadData();

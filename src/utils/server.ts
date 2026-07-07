@@ -6,6 +6,7 @@ import axios from "axios";
 import { InputFile } from "grammy";
 import { MagicClient } from "../client";
 import * as auth from "./auth";
+import { log } from "./logger";
 import {
   fetchMagicCookies, getMagicCookies, getAvailableCookieProfiles,
   LOG_GROUP_ID, getActiveProfile, getActiveAccountEmail,
@@ -84,7 +85,7 @@ export async function startWebServer(bot: any): Promise<void> {
   _bot = bot;
 
   try { _botInfo = await bot.api.getMe(); }
-  catch (e: any) { console.error("Failed to fetch bot info:", e.message); }
+  catch (e: any) { log.error("WEB", `Failed to fetch bot info — ${e.message}`); }
 
   await fetchMagicCookies();
 
@@ -93,7 +94,7 @@ export async function startWebServer(bot: any): Promise<void> {
     const info = await client.getAccountInfo();
     if (info) Object.assign(_accountInfo, info);
   } catch (e: any) {
-    console.error("Failed to load account info at startup:", e.message);
+    log.error("WEB", `Failed to load account info at startup — ${e.message}`);
   }
 
   const app = express();
@@ -270,14 +271,15 @@ export async function startWebServer(bot: any): Promise<void> {
           try {
             const logMsg = await _bot.api.sendDocument(LOG_GROUP_ID, new InputFile(fileContent, filename), { caption: `<code>${filename}</code>`, parse_mode: "HTML" });
             logMsgId = logMsg.message_id;
-          } catch (e: any) { console.error("[NZB] Failed to send to log channel:", e.message); }
+          } catch (e: any) { log.error("NZB", `Failed to send to log channel — ${e.message}`); }
         }
         try {
           nzbDb.insertFile({ msg_id: logMsgId, file_name: filename, caption: filename, keywords: extractKeywords(filename, filename), file_type: "nzb" });
           markDirty();
+          log.nzb(`Indexed: ${filename} (msg_id=${logMsgId}) via MagicNZB`);
           try { clearSearchCache(); } catch (_) {}
-        } catch (dbErr: any) { console.error("[NZB] DB index error (web):", dbErr.message); }
-        res.json({ status: "success", message: `Uploaded ${filename} to MagicNZB` });
+        } catch (dbErr: any) { log.error("NZB", `DB index error — ${dbErr.message}`); }
+        res.json({ status: "success", message: `Uploaded ${filename} to MagicNZB`, msg_id: logMsgId });
       } else {
         res.status(502).json({ error: result?.error ?? "Unknown error" });
       }
@@ -299,8 +301,8 @@ export async function startWebServer(bot: any): Promise<void> {
         nzbDb.insertFile({ msg_id: logMsgId, file_name: filename, caption: filename, keywords: extractKeywords(filename, filename), file_type: "nzb" });
         markDirty();
         try { clearSearchCache(); } catch (_) {}
-      } catch (dbErr: any) { console.error("[NZB] DB index error (direct log):", dbErr.message); }
-      res.json({ status: "success", message: `Sent ${filename} to log group` });
+      } catch (dbErr: any) { log.error("NZB", `DB index error — ${dbErr.message}`); }
+      res.json({ status: "success", message: `Sent ${filename} to log group`, msg_id: logMsgId });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
@@ -394,7 +396,14 @@ export async function startWebServer(bot: any): Promise<void> {
       }
       const enriched = results.map((r: any) => {
         const stripped = String(Math.abs(LOG_GROUP_ID ?? 0)).replace(/^100/, "");
-        return { msg_id: r.msg_id, file_name: r.file_name, caption: r.caption, uploaded_at: r.uploaded_at, link: `https://t.me/c/${stripped}/${r.msg_id}` };
+        return {
+          msg_id: r.msg_id,
+          file_name: r.file_name,
+          caption: r.caption,
+          uploaded_at: r.uploaded_at,
+          link: `https://t.me/c/${stripped}/${r.msg_id}`,
+          has_custom_thumbnail: nzbDb.hasCustomThumbnail(r.msg_id),
+        };
       });
       res.json({ results: enriched, total: enriched.length, query: rawQuery });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -447,7 +456,7 @@ export async function startWebServer(bot: any): Promise<void> {
       let telegramOk = false;
       if (_bot && LOG_GROUP_ID && msgId > 0) {
         try { await _bot.api.editMessageCaption(LOG_GROUP_ID, msgId, { caption: `<code>${newName}</code>`, parse_mode: "HTML" }); telegramOk = true; }
-        catch (e: any) { console.error(`[NZB] Caption update failed (msg_id=${msgId}):`, e.message); }
+        catch (e: any) { log.error("NZB", `Caption update failed (msg_id=${msgId}) — ${e.message}`); }
       }
 
       const newKeywords = extractKeywords(newName, newName);
@@ -485,7 +494,7 @@ export async function startWebServer(bot: any): Promise<void> {
       let telegramOk = false;
       if (_bot && LOG_GROUP_ID && msgId > 0) {
         try { await _bot.api.editMessageCaption(LOG_GROUP_ID, msgId, { caption: `<code>${newName}</code>`, parse_mode: "HTML" }); telegramOk = true; }
-        catch (e: any) { console.error(`[AI-RENAME] Caption update failed (msg_id=${msgId}):`, e.message); }
+        catch (e: any) { log.error("NZB", `AI rename caption update failed (msg_id=${msgId}) — ${e.message}`); }
       }
 
       res.json({ success: true, old_name: currentName, new_name: newName, telegram_updated: telegramOk });
@@ -503,7 +512,7 @@ export async function startWebServer(bot: any): Promise<void> {
       let telegramOk = false;
       if (_bot && LOG_GROUP_ID && msgId > 0) {
         try { await _bot.api.deleteMessage(LOG_GROUP_ID, msgId); telegramOk = true; }
-        catch (e: any) { console.error(`[NZB] Failed to delete from log channel (msg_id=${msgId}):`, e.message); }
+        catch (e: any) { log.error("NZB", `Failed to delete from log channel (msg_id=${msgId}) — ${e.message}`); }
       }
 
       const result = nzbDb.deleteByMsgId(msgId);
@@ -512,6 +521,54 @@ export async function startWebServer(bot: any): Promise<void> {
 
       res.json({ success: true, telegram_deleted: telegramOk, db_deleted: result.changes > 0 });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ─── Custom thumbnail: store (POST) ──────────────────────────────
+  app.post("/api/logs/:msg_id/custom-thumbnail", async (req, res) => {
+    const msgId = parseInt(req.params.msg_id, 10);
+    if (isNaN(msgId)) return res.status(400).json({ error: "Invalid ID" });
+
+    const { url } = req.body as { url?: string };
+    if (!url || !url.startsWith("http")) return res.status(400).json({ error: "Valid image URL required" });
+
+    const record = nzbDb.getByMsgId(msgId);
+    if (!record) return res.status(404).json({ error: "Log entry not found" });
+
+    try {
+      const imgRes = await axios.get(url, {
+        responseType: "arraybuffer",
+        timeout: 15000,
+        maxContentLength: 10 * 1024 * 1024, // 10 MB max
+        headers: { "User-Agent": "Mozilla/5.0" },
+      });
+
+      const contentType = (imgRes.headers["content-type"] as string) || "image/jpeg";
+      const mime = contentType.split(";")[0].trim();
+
+      if (!mime.startsWith("image/")) return res.status(400).json({ error: "URL does not point to an image" });
+
+      const data = Buffer.from(imgRes.data as ArrayBuffer);
+      nzbDb.setCustomThumbnail(msgId, data, mime);
+      markDirty();
+      log.thumb(`Saved custom thumbnail for msg_id=${msgId} — ${record.file_name} (${(data.length / 1024).toFixed(1)} KB, ${mime})`);
+      res.json({ success: true, size: data.length, mime });
+    } catch (e: any) {
+      log.error("THUMB", `Download failed for msg_id=${msgId} — ${e.message}`);
+      res.status(502).json({ error: `Failed to download image: ${e.message}` });
+    }
+  });
+
+  // ─── Custom thumbnail: serve (GET) ───────────────────────────────
+  app.get("/api/logs/:msg_id/custom-thumbnail", (req, res) => {
+    const msgId = parseInt(req.params.msg_id, 10);
+    if (isNaN(msgId)) return res.status(400).json({ error: "Invalid ID" });
+
+    const thumb = nzbDb.getCustomThumbnail(msgId);
+    if (!thumb) return res.status(404).send("No custom thumbnail");
+
+    res.set("Content-Type", thumb.mime);
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    res.send(thumb.data);
   });
 
   // ─── ThePornDB thumbnail proxy (GraphQL) ─────────────────────────
@@ -572,14 +629,14 @@ export async function startWebServer(bot: any): Promise<void> {
       if (!posterUrl) return res.status(404).send("No thumbnail");
       res.redirect(302, posterUrl);
     } catch (e: any) {
-      console.error(`[THUMB] ThePornDB error for msg_id=${msgId}:`, e.message);
+      log.error("THUMB", `ThePornDB lookup failed for msg_id=${msgId} — ${e.message}`);
       _thumbCache.set(msgId, { url: null, ts: Date.now() });
       res.status(404).send("No thumbnail");
     }
   });
 
   app.listen(UPLOAD_PORT, "0.0.0.0", () => {
-    console.log(`Web server started on port ${UPLOAD_PORT}`);
+    log.web(`Listening on port ${UPLOAD_PORT}`);
   });
 }
 

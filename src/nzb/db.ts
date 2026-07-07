@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import path from "path";
 import "dotenv/config";
 import type { NzbMeta, NzbRecord } from "../types";
+import { log } from "../utils/logger";
 
 const DB_PATH: string = process.env.NZB_DB_PATH ?? path.join(__dirname, "..", "..", "nzb_index.db");
 
@@ -15,6 +16,9 @@ let _getByMsgIdStmt: Database.Statement | null = null;
 let _getRecentStmt: Database.Statement | null = null;
 let _updateFileStmt: Database.Statement | null = null;
 let _deleteByMsgIdStmt: Database.Statement | null = null;
+let _setCustomThumbStmt: Database.Statement | null = null;
+let _getCustomThumbStmt: Database.Statement | null = null;
+let _hasCustomThumbStmt: Database.Statement | null = null;
 
 export function init(): Database.Database {
   if (db) return db;
@@ -67,7 +71,18 @@ export function init(): Database.Database {
     END
   `);
 
-  console.log(`[NZB-DB] Initialized at ${DB_PATH}`);
+  // Migration: add custom thumbnail columns if not present
+  const cols = (db.prepare("PRAGMA table_info(nzb_meta)").all() as any[]).map((c: any) => c.name);
+  if (!cols.includes("custom_thumbnail")) {
+    db.exec(`ALTER TABLE nzb_meta ADD COLUMN custom_thumbnail BLOB DEFAULT NULL`);
+    log.db("Migration: added custom_thumbnail column");
+  }
+  if (!cols.includes("custom_thumbnail_mime")) {
+    db.exec(`ALTER TABLE nzb_meta ADD COLUMN custom_thumbnail_mime TEXT DEFAULT NULL`);
+    log.db("Migration: added custom_thumbnail_mime column");
+  }
+
+  log.db(`Initialized at ${DB_PATH}`);
   return db;
 }
 
@@ -197,6 +212,38 @@ export function deleteByMsgId(msgId: number): Database.RunResult {
   return _deleteByMsgIdStmt.run(msgId);
 }
 
+export function setCustomThumbnail(msgId: number, data: Buffer, mime: string): void {
+  const d = ensureDb();
+  if (!_setCustomThumbStmt) {
+    _setCustomThumbStmt = d.prepare(`
+      UPDATE nzb_meta SET custom_thumbnail = @data, custom_thumbnail_mime = @mime WHERE msg_id = @msg_id
+    `);
+  }
+  _setCustomThumbStmt.run({ msg_id: msgId, data, mime });
+}
+
+export function getCustomThumbnail(msgId: number): { data: Buffer; mime: string } | null {
+  const d = ensureDb();
+  if (!_getCustomThumbStmt) {
+    _getCustomThumbStmt = d.prepare(`
+      SELECT custom_thumbnail, custom_thumbnail_mime FROM nzb_meta WHERE msg_id = ?
+    `);
+  }
+  const row = _getCustomThumbStmt.get(msgId) as { custom_thumbnail: Buffer | null; custom_thumbnail_mime: string | null } | undefined;
+  if (!row?.custom_thumbnail) return null;
+  return { data: row.custom_thumbnail, mime: row.custom_thumbnail_mime || "image/jpeg" };
+}
+
+export function hasCustomThumbnail(msgId: number): boolean {
+  const d = ensureDb();
+  if (!_hasCustomThumbStmt) {
+    _hasCustomThumbStmt = d.prepare(`
+      SELECT 1 FROM nzb_meta WHERE msg_id = ? AND custom_thumbnail IS NOT NULL
+    `);
+  }
+  return !!_hasCustomThumbStmt.get(msgId);
+}
+
 export function getDb(): Database.Database {
   return ensureDb();
 }
@@ -217,6 +264,9 @@ export function close(): void {
     _getRecentStmt = null;
     _updateFileStmt = null;
     _deleteByMsgIdStmt = null;
-    console.log("[NZB-DB] Closed.");
+    _setCustomThumbStmt = null;
+    _getCustomThumbStmt = null;
+    _hasCustomThumbStmt = null;
+    log.db("Closed.");
   }
 }

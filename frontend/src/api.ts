@@ -28,6 +28,7 @@ export interface LogEntry {
   caption: string;
   uploaded_at: string;
   link: string;
+  has_custom_thumbnail?: boolean;
 }
 
 export interface AccountInfo {
@@ -80,8 +81,10 @@ export const api = {
   grabNzb:          (id: number)  => req<{ status: string }>("POST", `/api/grab/${id}`),
   renameLog:        (id: number, newName: string) => req("PUT", `/api/logs/${id}/rename`, { new_name: newName }),
   aiRenameLog:      (id: number)  => req<{ new_name: string }>("POST", `/api/logs/${id}/ai-rename`),
-  deleteLog:        (id: number)  => req<void>("DELETE", `/api/logs/${id}`),
-  logThumbnailUrl:  (id: number)  => `/api/logs/${id}/thumbnail`,
+  deleteLog:        (id: number)  => req<{ success: boolean; telegram_deleted: boolean; db_deleted: boolean }>("DELETE", `/api/logs/${id}`),
+  logThumbnailUrl:       (id: number)  => `/api/logs/${id}/thumbnail`,
+  logCustomThumbnailUrl: (id: number)  => `/api/logs/${id}/custom-thumbnail`,
+  setCustomThumbnail:    (id: number, url: string) => req<{ success: boolean; size: number; mime: string }>("POST", `/api/logs/${id}/custom-thumbnail`, { url }),
 
   account:          ()            => req<AccountInfo>("GET", "/api/account"),
   renewAccount:     ()            => req<{ success: boolean }>("POST", "/api/account/renew"),

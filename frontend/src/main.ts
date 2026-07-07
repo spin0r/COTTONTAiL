@@ -167,6 +167,8 @@ function bootApp() {
     // Don't intercept when typing in an input/textarea
     const tag = (e.target as HTMLElement).tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    // Don't switch tabs when a modal is open
+    if (document.querySelector('.modal-overlay')) return;
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       const current = getRoute();
       const idx = routes.indexOf(current);

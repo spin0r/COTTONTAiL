@@ -206,7 +206,7 @@ function showChangePasswordModal() {
           </div>
           <div class="form-field">
             <label class="form-label">New Password</label>
-            <input type="password" class="input" id="new-pw" required minlength="4">
+            <input type="password" class="input" id="new-pw" required minlength="1">
           </div>
           <div class="form-field">
             <label class="form-label">Confirm Password</label>

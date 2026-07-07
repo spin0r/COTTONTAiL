@@ -1,6 +1,6 @@
 import { api } from '../api.ts';
 import type { LogEntry } from '../api.ts';
-import { iconSearch, iconDownload, iconEdit, iconSparkle, iconTrash, iconCheck, iconX, iconClipboard } from '../icons.ts';
+import { iconSearch, iconDownload, iconEdit, iconSparkle, iconTrash, iconCheck, iconX, iconClipboard, iconImage, iconTelegram } from '../icons.ts';
 import { fmtDate } from '../api.ts';
 
 let mainContainer: HTMLElement | null = null;
@@ -36,7 +36,7 @@ export async function renderLogs(container: HTMLElement) {
               <tr>
                 <th>File Name</th>
                 <th style="width:120px">Date</th>
-                <th style="width:140px">Actions</th>
+                <th style="width:160px">Actions</th>
               </tr>
             </thead>
             <tbody id="logs-tbody"></tbody>
@@ -102,10 +102,16 @@ function renderTable(logs: LogEntry[], total: number) {
     }
 
     return `
-      <tr data-id="${l.msg_id}">
+      <tr data-id="${l.msg_id}" data-has-custom="${l.has_custom_thumbnail ? '1' : '0'}">
         <td>
           <div class="cell-name filename-display">
-            <span class="log-name-link cell-name-link" data-thumb-id="${l.msg_id}" title="Click to preview">${l.file_name}</span>
+            <span class="log-name-link cell-name-link">${l.file_name}</span>
+            ${l.has_custom_thumbnail
+              ? `<span class="custom-thumb-dot" title="Has custom thumbnail"></span>`
+              : ''}
+            ${l.link
+              ? `<a href="${l.link}" target="_blank" class="log-tg-link" title="Open in Telegram" style="color:var(--fg-3);margin-left:6px;vertical-align:middle;display:inline-flex;opacity:.6" tabindex="-1">${iconTelegram()}</a>`
+              : ''}
           </div>
           <div class="filename-edit" style="display:none;align-items:center;gap:6px">
             <input type="text" class="inline-rename" value="${l.file_name}">
@@ -119,6 +125,7 @@ function renderTable(logs: LogEntry[], total: number) {
             <button class="btn-icon btn-grab" title="Grab to MagicNZB">${iconDownload()}</button>
             <button class="btn-icon btn-rename" title="Rename">${iconEdit()}</button>
             <button class="btn-icon btn-ai-rename" title="AI Smart Rename">${iconSparkle()}</button>
+            <button class="btn-icon btn-backfill" title="Set Custom Thumbnail" style="${l.has_custom_thumbnail ? 'color:var(--success)' : ''}">${iconImage()}</button>
             <button class="btn-icon btn-delete" title="Delete">${iconTrash()}</button>
           </div>
           <div class="action-loading" style="display:none;justify-content:flex-end;padding-right:12px">
@@ -130,9 +137,14 @@ function renderTable(logs: LogEntry[], total: number) {
   }).join('');
 }
 
-// ─── Thumbnail modal ─────────────────────────────────────────────
-function showThumbModal(msgId: number, fileName: string, telegramLink: string) {
-  const thumbUrl = api.logThumbnailUrl(msgId);
+// ─── Dual thumbnail modal (slideshow) ───────────────────────────
+function showThumbModal(msgId: number, fileName: string, telegramLink: string, hasCustom: boolean) {
+  // slides: [ { label, url, type } ]
+  const slides = [
+    { label: 'ThePornDB', url: api.logThumbnailUrl(msgId), preload: true },
+    ...(hasCustom ? [{ label: 'Custom', url: api.logCustomThumbnailUrl(msgId), preload: false }] : []),
+  ];
+  let current = 0;
 
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -143,10 +155,21 @@ function showThumbModal(msgId: number, fileName: string, telegramLink: string) {
         <button class="modal-close" id="close-thumb-modal">${iconX()}</button>
       </div>
       <div class="log-thumb-body">
-        <div class="log-thumb-img-wrap" id="thumb-img-wrap">
+        <div class="log-thumb-viewer" id="thumb-viewer">
           <div class="spinner"></div>
+          ${slides.length > 1 ? `
+            <button class="log-thumb-arrow prev" id="thumb-prev">&#8249;</button>
+            <button class="log-thumb-arrow next" id="thumb-next">&#8250;</button>
+          ` : ''}
+        </div>
+        <div class="log-thumb-bar">
+          <span class="log-thumb-label" id="thumb-label">${slides[0].label}</span>
+          <div class="log-thumb-dots" id="thumb-dots">
+            ${slides.map((_, i) => `<button class="log-thumb-dot-btn ${i === 0 ? 'active' : ''}" data-idx="${i}"></button>`).join('')}
+          </div>
         </div>
         <div class="log-thumb-actions">
+          <button class="btn btn-ghost" id="btn-set-custom" style="font-size:12px">${iconImage()} Set Custom Image</button>
           ${telegramLink ? `<a href="${telegramLink}" target="_blank" class="btn btn-ghost" style="font-size:12px">Open in Telegram</a>` : ''}
         </div>
       </div>
@@ -155,28 +178,141 @@ function showThumbModal(msgId: number, fileName: string, telegramLink: string) {
 
   document.body.appendChild(modal);
 
+  const viewer   = modal.querySelector('#thumb-viewer') as HTMLElement;
+  const labelEl  = modal.querySelector('#thumb-label') as HTMLElement;
+  const dotsEl   = modal.querySelector('#thumb-dots') as HTMLElement;
+
+  function goTo(idx: number) {
+    current = (idx + slides.length) % slides.length;
+    const slide = slides[current];
+
+    // update label + dots
+    labelEl.textContent = slide.label;
+    dotsEl.querySelectorAll('.log-thumb-dot-btn').forEach((d, i) =>
+      d.classList.toggle('active', i === current)
+    );
+
+    // show spinner while loading
+    // keep arrows in DOM
+    const arrows = viewer.querySelectorAll('.log-thumb-arrow');
+    viewer.innerHTML = '';
+    arrows.forEach(a => viewer.appendChild(a));
+
+    const spinner = document.createElement('div');
+    spinner.className = 'spinner';
+    viewer.appendChild(spinner);
+
+    const img = new Image();
+    img.className = 'log-thumb-img';
+    img.onload = () => {
+      spinner.remove();
+      viewer.appendChild(img);
+    };
+    img.onerror = () => {
+      spinner.remove();
+      const empty = document.createElement('div');
+      empty.className = 'log-thumb-empty';
+      empty.textContent = slide.label === 'Custom' ? 'No custom thumbnail' : 'No match on ThePornDB';
+      viewer.appendChild(empty);
+    };
+    img.src = slide.url;
+  }
+
+  // initial load
+  goTo(0);
+
+  // arrow buttons
+  modal.querySelector('#thumb-prev')?.addEventListener('click', () => goTo(current - 1));
+  modal.querySelector('#thumb-next')?.addEventListener('click', () => goTo(current + 1));
+
+  // dot buttons
+  dotsEl?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.log-thumb-dot-btn') as HTMLElement | null;
+    if (btn) goTo(parseInt(btn.getAttribute('data-idx') || '0', 10));
+  });
+
+  // close
   const close = () => {
     modal.remove();
-    document.removeEventListener('keydown', escHandler);
+    document.removeEventListener('keydown', keyHandler, true);
   };
-  const escHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-  document.addEventListener('keydown', escHandler);
   modal.querySelector('#close-thumb-modal')?.addEventListener('click', close);
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 
-  // Load image
-  const wrap = modal.querySelector('#thumb-img-wrap') as HTMLElement;
-  const img = new Image();
-  img.className = 'log-thumb-img';
-  img.alt = fileName;
-  img.onload = () => {
-    wrap.innerHTML = '';
-    wrap.appendChild(img);
+  // arrow keys — use capture so they don't fire tab switching
+  // only active while modal is open
+  const keyHandler = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') { close(); return; }
+    if (slides.length < 2) return;
+    if (e.key === 'ArrowLeft')  { goTo(current - 1); }
+    if (e.key === 'ArrowRight') { goTo(current + 1); }
   };
-  img.onerror = () => {
-    wrap.innerHTML = `<div style="color:var(--fg-3);font-size:13px;text-align:center;padding:20px">No thumbnail found</div>`;
-  };
-  img.src = thumbUrl;
+  document.addEventListener('keydown', keyHandler, true);
+
+  // Set custom image
+  modal.querySelector('#btn-set-custom')?.addEventListener('click', () => {
+    close();
+    showSetCustomModal(msgId, fileName);
+  });
+}
+
+// ─── Set custom thumbnail modal ──────────────────────────────────
+function showSetCustomModal(msgId: number, fileName: string) {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <div class="modal-title">Set Custom Thumbnail</div>
+        <button class="modal-close" id="sc-close">${iconX()}</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <div style="font-size:12px;color:var(--fg-2);word-break:break-all">${fileName}</div>
+        <div>
+          <label style="font-size:11px;color:var(--fg-3);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Image URL</label>
+          <input id="sc-url" type="url" class="search-input" style="width:100%" placeholder="https://example.com/poster.jpg">
+          <div style="font-size:11px;color:var(--fg-3);margin-top:4px">Downloaded once and stored permanently in the database — survives redeploys.</div>
+        </div>
+        <div id="sc-status" style="font-size:12px;display:none"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-ghost" id="sc-cancel">Cancel</button>
+          <button class="btn btn-primary" id="sc-save">Download &amp; Save</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const close = () => modal.remove();
+  modal.querySelector('#sc-close')?.addEventListener('click', close);
+  modal.querySelector('#sc-cancel')?.addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+  modal.querySelector('#sc-save')?.addEventListener('click', async () => {
+    const url = (modal.querySelector('#sc-url') as HTMLInputElement).value.trim();
+    if (!url) return;
+
+    const saveBtn  = modal.querySelector('#sc-save') as HTMLButtonElement;
+    const statusEl = modal.querySelector('#sc-status') as HTMLElement;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Downloading…';
+    statusEl.style.display = 'block';
+    statusEl.style.color = 'var(--fg-3)';
+    statusEl.textContent = 'Downloading and storing image…';
+
+    try {
+      const res = await api.setCustomThumbnail(msgId, url);
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = `✓ Saved (${(res.size / 1024).toFixed(1)} KB, ${res.mime})`;
+      saveBtn.textContent = 'Saved!';
+      setTimeout(() => { close(); loadData(); }, 800);
+    } catch (err: any) {
+      statusEl.style.color = 'var(--error)';
+      statusEl.textContent = `✗ ${err.message}`;
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Download & Save';
+    }
+  });
 }
 
 function attachEvents() {
@@ -191,18 +327,26 @@ function attachEvents() {
 
   mainContainer.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement;
-    const tr = target.closest('tr');
+    const tr = target.closest('tr') as HTMLElement | null;
     if (!tr) return;
     const idStr = tr.getAttribute('data-id');
     if (!idStr) return;
     const id = parseInt(idStr, 10);
 
-    // Filename click → thumbnail modal
+    // Filename → open dual thumbnail modal
     if (target.closest('.log-name-link')) {
       const nameEl = tr.querySelector('.log-name-link') as HTMLElement;
       const fileName = nameEl?.textContent?.trim() || '';
       const link = tr.querySelector('a')?.getAttribute('href') || '';
-      showThumbModal(id, fileName, link);
+      const hasCustom = tr.getAttribute('data-has-custom') === '1';
+      showThumbModal(id, fileName, link, hasCustom);
+      return;
+    }
+
+    // Backfill button → open set custom modal directly
+    if (target.closest('.btn-backfill')) {
+      const nameEl = tr.querySelector('.log-name-link') as HTMLElement;
+      showSetCustomModal(id, nameEl?.textContent?.trim() || '');
       return;
     }
 
@@ -226,8 +370,38 @@ function attachEvents() {
     if (target.closest('.btn-delete')) {
       if (confirm('Delete this entry from database and Telegram?')) {
         await performAction(tr, async () => {
-          await api.deleteLog(id);
-          (window as any).showToast('Entry deleted', 'success');
+          const link = tr.querySelector('.log-tg-link')?.getAttribute('href') || '';
+          const res = await api.deleteLog(id);
+          if (!res.telegram_deleted) {
+            // Show modal with direct link so user can delete manually
+            const m = document.createElement('div');
+            m.className = 'modal-overlay';
+            m.innerHTML = `
+              <div class="modal" style="max-width:420px">
+                <div class="modal-header">
+                  <div class="modal-title" style="color:var(--error)">⚠ Telegram message not deleted</div>
+                  <button class="modal-close" id="tg-warn-close">${iconX()}</button>
+                </div>
+                <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
+                  <p style="font-size:13px;color:var(--fg-2)">The entry was removed from the database, but the Telegram message could not be deleted (bot may lack permission or the message is too old).</p>
+                  ${link ? `
+                    <div style="font-size:12px;color:var(--fg-3)">Delete it manually:</div>
+                    <a href="${link}" target="_blank" class="btn btn-ghost" style="word-break:break-all;font-size:12px;text-align:left">${link}</a>
+                  ` : ''}
+                  <div style="display:flex;justify-content:flex-end">
+                    <button class="btn btn-primary" id="tg-warn-close-btn">OK</button>
+                  </div>
+                </div>
+              </div>
+            `;
+            document.body.appendChild(m);
+            const close = () => m.remove();
+            m.querySelector('#tg-warn-close')?.addEventListener('click', close);
+            m.querySelector('#tg-warn-close-btn')?.addEventListener('click', close);
+            m.addEventListener('click', (e) => { if (e.target === m) close(); });
+          } else {
+            (window as any).showToast('Entry deleted', 'success');
+          }
           loadData();
           loadStats();
         });
@@ -291,13 +465,25 @@ async function performAction(tr: HTMLElement, actionFn: () => Promise<void>) {
 async function saveRename(tr: HTMLElement, id: number) {
   const input = tr.querySelector('.inline-rename') as HTMLInputElement;
   const newName = input.value.trim();
-  const oldName = tr.querySelector('.filename-display')?.textContent?.trim() || '';
+  const nameSpan = tr.querySelector('.log-name-link') as HTMLElement;
+  const oldName = nameSpan?.textContent?.trim() || '';
+
   if (!newName || newName === oldName) {
     tr.querySelector('.btn-rename-cancel')!.dispatchEvent(new Event('click', { bubbles: true }));
     return;
   }
+
   await performAction(tr, async () => {
     await api.renameLog(id, newName);
-    loadData();
+
+    // Update name span in-place
+    if (nameSpan) nameSpan.textContent = newName;
+    input.value = newName;
+
+    // Collapse edit UI back to display
+    (tr.querySelector('.filename-display') as HTMLElement).style.display = 'block';
+    (tr.querySelector('.filename-edit') as HTMLElement).style.display = 'none';
+
+    (window as any).showToast(`Renamed to: ${newName}`, 'success');
   });
 }

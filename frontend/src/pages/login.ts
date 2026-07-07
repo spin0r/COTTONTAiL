@@ -95,7 +95,7 @@ export function renderLogin(container: HTMLElement) {
 
       if (!current || !newPw) { errEl.textContent = 'All fields required'; return; }
       if (newPw !== confirm) { errEl.textContent = 'Passwords do not match'; return; }
-      if (newPw.length < 4) { errEl.textContent = 'Password too short'; return; }
+      if (newPw.length < 1) { errEl.textContent = 'Password cannot be empty'; return; }
 
       errEl.textContent = '';
       btn.disabled = true;
