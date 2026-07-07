@@ -83,8 +83,8 @@ export const api = {
   aiRenameLog:      (id: number)  => req<{ new_name: string }>("POST", `/api/logs/${id}/ai-rename`),
   deleteLog:        (id: number)  => req<{ success: boolean; telegram_deleted: boolean; db_deleted: boolean }>("DELETE", `/api/logs/${id}`),
   logThumbnailUrl:       (id: number)  => `/api/logs/${id}/thumbnail`,
-  logCustomThumbnailUrl: (id: number)  => `/api/logs/${id}/custom-thumbnail`,
-  setCustomThumbnail:    (id: number, url: string) => req<{ success: boolean; size: number; mime: string }>("POST", `/api/logs/${id}/custom-thumbnail`, { url }),
+  logCustomThumbnailUrl: (id: number)  => `/api/logs/${id}/sample`,
+  setCustomThumbnail:    (id: number, url: string) => req<{ success: boolean; size: number; mime: string }>("POST", `/api/logs/${id}/sample`, { url }),
 
   account:          ()            => req<AccountInfo>("GET", "/api/account"),
   renewAccount:     ()            => req<{ success: boolean }>("POST", "/api/account/renew"),
