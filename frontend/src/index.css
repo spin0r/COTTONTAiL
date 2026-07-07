@@ -367,6 +367,53 @@ select.input {
   justify-content: flex-end;
 }
 
+/* ─── Log thumbnail modal ────────────────────────────────────────── */
+.log-name-link {
+  cursor: pointer;
+  color: var(--fg);
+}
+.log-name-link:hover {
+  text-decoration: underline;
+  color: var(--fg-2);
+}
+.log-thumb-modal {
+  max-width: 860px !important;
+  width: min(92vw, 860px) !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+.log-thumb-modal .modal-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.log-thumb-body {
+  display: flex;
+  flex-direction: column;
+}
+.log-thumb-img-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+.log-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.log-thumb-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+
 /* ─── Progress bar ───────────────────────────────────────────────── */
 .progress-bar {
   height: 3px;

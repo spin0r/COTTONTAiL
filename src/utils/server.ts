@@ -514,6 +514,70 @@ export async function startWebServer(bot: any): Promise<void> {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
+  // ─── ThePornDB thumbnail proxy (GraphQL) ─────────────────────────
+  // In-memory cache: msg_id → { url, ts }
+  const _thumbCache = new Map<number, { url: string | null; ts: number }>();
+  const THUMB_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+  app.get("/api/logs/:msg_id/thumbnail", async (req, res) => {
+    const msgId = parseInt(req.params.msg_id, 10);
+    if (isNaN(msgId)) return res.status(400).json({ error: "Invalid ID" });
+
+    const apiToken = process.env.THEPORNDB_API_TOKEN;
+    if (!apiToken) return res.status(503).json({ error: "THEPORNDB_API_TOKEN not configured" });
+
+    // Serve from cache
+    const cached = _thumbCache.get(msgId);
+    if (cached && Date.now() - cached.ts < THUMB_CACHE_TTL) {
+      if (!cached.url) return res.status(404).send("No thumbnail");
+      return res.redirect(302, cached.url);
+    }
+
+    const record = nzbDb.getByMsgId(msgId);
+    if (!record) return res.status(404).json({ error: "Record not found" });
+
+    // Build search term — strip extension, replace dots/underscores with spaces
+    const raw = (record.file_name || record.caption || "").replace(/\.nzb$/i, "");
+    const term = raw.replace(/[._]+/g, " ").trim();
+    if (!term) return res.status(404).send("No filename");
+
+    const query = `
+      query SearchScene($term: String!) {
+        searchScene(term: $term) {
+          images { url width }
+        }
+      }
+    `;
+
+    try {
+      const gqlRes = await axios.post(
+        "https://theporndb.net/graphql",
+        { query, variables: { term } },
+        {
+          headers: {
+            "Authorization": `Bearer ${apiToken}`,
+            "Content-Type": "application/json",
+          },
+          timeout: 8000,
+        }
+      );
+
+      const scenes: any[] = gqlRes.data?.data?.searchScene ?? [];
+      const images: any[] = scenes[0]?.images ?? [];
+      const best = images.sort((a: any, b: any) => (b.width ?? 0) - (a.width ?? 0))[0];
+      const posterUrl: string | null = best?.url ?? null;
+
+      _thumbCache.set(msgId, { url: posterUrl, ts: Date.now() });
+
+      if (!posterUrl) return res.status(404).send("No thumbnail");
+      res.redirect(302, posterUrl);
+    } catch (e: any) {
+      console.error(`[THUMB] ThePornDB error for msg_id=${msgId}:`, e.message);
+      _thumbCache.set(msgId, { url: null, ts: Date.now() });
+      res.status(404).send("No thumbnail");
+    }
+  });
+
   app.listen(UPLOAD_PORT, "0.0.0.0", () => {
     console.log(`Web server started on port ${UPLOAD_PORT}`);
   });

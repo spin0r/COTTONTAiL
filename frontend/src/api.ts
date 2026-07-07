@@ -81,6 +81,7 @@ export const api = {
   renameLog:        (id: number, newName: string) => req("PUT", `/api/logs/${id}/rename`, { new_name: newName }),
   aiRenameLog:      (id: number)  => req<{ new_name: string }>("POST", `/api/logs/${id}/ai-rename`),
   deleteLog:        (id: number)  => req<void>("DELETE", `/api/logs/${id}`),
+  logThumbnailUrl:  (id: number)  => `/api/logs/${id}/thumbnail`,
 
   account:          ()            => req<AccountInfo>("GET", "/api/account"),
   renewAccount:     ()            => req<{ success: boolean }>("POST", "/api/account/renew"),
