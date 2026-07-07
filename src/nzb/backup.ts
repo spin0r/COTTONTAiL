@@ -274,6 +274,18 @@ export function markDirty(): void {
   if (dirtyTimer) clearTimeout(dirtyTimer);
   dirtyTimer = setTimeout(async () => {
     dirtyTimer = null;
+    // Check cooldown before calling runBackup — if blocked, reschedule
+    const elapsed = Date.now() - lastBackupAt;
+    if (elapsed < MIN_BACKUP_INTERVAL && !isBackingUp) {
+      const retryMs = MIN_BACKUP_INTERVAL - elapsed + 1000;
+      log.backup(`Dirty flag — cooldown active, retrying in ${Math.ceil(retryMs / 1000)}s`);
+      dirtyTimer = setTimeout(async () => {
+        dirtyTimer = null;
+        log.backup("Dirty flag — syncing to Dropbox...");
+        await runBackup();
+      }, retryMs);
+      return;
+    }
     log.backup("Dirty flag — syncing to Dropbox...");
     await runBackup();
   }, DIRTY_DEBOUNCE_MS);
