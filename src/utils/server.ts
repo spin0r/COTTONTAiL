@@ -685,7 +685,7 @@ export async function startWebServer(bot: any): Promise<void> {
     res.send(thumb.data);
   });
 
-  // ─── ThePornDB thumbnail proxy (GraphQL) ─────────────────────────
+  // ─── ThePornDB thumbnail proxy (REST API) ─────────────────────────
   // In-memory cache: msg_id → { url, ts }
   const _thumbCache = new Map<number, { url: string | null; ts: number }>();
   const THUMB_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -707,36 +707,38 @@ export async function startWebServer(bot: any): Promise<void> {
     const record = nzbDb.getByMsgId(msgId);
     if (!record) return res.status(404).json({ error: "Record not found" });
 
-    // Build search term — strip extension, replace dots/underscores with spaces
+    // Use the raw filename for the parse endpoint — it extracts studio codes automatically
     const raw = (record.file_name || record.caption || "").replace(/\.nzb$/i, "");
-    const term = raw.replace(/[._]+/g, " ").trim();
-    if (!term) return res.status(404).send("No filename");
-
-    const query = `
-      query SearchScene($term: String!) {
-        searchScene(term: $term) {
-          images { url width }
-        }
-      }
-    `;
+    if (!raw) return res.status(404).send("No filename");
 
     try {
-      const gqlRes = await axios.post(
-        "https://theporndb.net/graphql",
-        { query, variables: { term } },
+      const apiRes = await axios.get(
+        "https://api.theporndb.net/scenes",
         {
+          params: { parse: raw, limit: 1 },
           headers: {
             "Authorization": `Bearer ${apiToken}`,
-            "Content-Type": "application/json",
+            "Accept": "application/json",
           },
-          timeout: 8000,
+          timeout: 10000,
         }
       );
 
-      const scenes: any[] = gqlRes.data?.data?.searchScene ?? [];
-      const images: any[] = scenes[0]?.images ?? [];
-      const best = images.sort((a: any, b: any) => (b.width ?? 0) - (a.width ?? 0))[0];
-      const posterUrl: string | null = best?.url ?? null;
+      const scenes: any[] = apiRes.data?.data ?? [];
+      const scene = scenes[0];
+
+      // Pick the best available image: background > image > poster
+      let posterUrl: string | null = null;
+      if (scene) {
+        posterUrl =
+          scene.background?.large ??
+          scene.background?.full ??
+          scene.image ??
+          scene.poster ??
+          scene.posters?.large ??
+          scene.posters?.full ??
+          null;
+      }
 
       _thumbCache.set(msgId, { url: posterUrl, ts: Date.now() });
 
