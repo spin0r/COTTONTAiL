@@ -397,6 +397,31 @@ function showSendToLogModal(tr: HTMLElement, name: string) {
   });
 }
 
+// ─── Provider-prefix thumbnail resolver ──────────────────────────────────────
+// DS_<hash>_thumb.jpg  → https://drunkenslug.com/covers/sample/<hash>_thumb.jpg
+// TR_<hash>_thumb.jpg  → https://www.tabula-rasa.pw/covers/sample/<hash>_thumb.jpg
+// https://...          → plain URL, passed through as-is
+function resolveThumbPrefix(prefix: string): string | null {
+  if (prefix.startsWith('DS_')) return `https://drunkenslug.com/covers/sample/${prefix.slice(3)}`;
+  if (prefix.startsWith('TR_')) return `https://www.tabula-rasa.pw/covers/sample/${prefix.slice(3)}`;
+  if (/^https?:\/\//i.test(prefix)) return prefix;
+  return null;
+}
+
+// Parse a filename that may contain a thumbnail prefix token before the .nzb title
+function parseFilenameWithThumb(filename: string): { thumbUrl: string; nzbName: string } {
+  const spaceIdx = filename.indexOf(' ');
+  if (spaceIdx > 0) {
+    const prefix = filename.slice(0, spaceIdx);
+    const rest = filename.slice(spaceIdx + 1).trim();
+    if (rest.toLowerCase().endsWith('.nzb')) {
+      const thumbUrl = resolveThumbPrefix(prefix);
+      if (thumbUrl) return { thumbUrl, nzbName: rest };
+    }
+  }
+  return { thumbUrl: '', nzbName: filename };
+}
+
 async function handleFiles(files: File[]) {
   const nzbFiles = files.filter(f => f.name.toLowerCase().endsWith('.nzb'));
   if (nzbFiles.length === 0) {
@@ -410,15 +435,29 @@ async function handleFiles(files: File[]) {
   for (const file of nzbFiles) {
     const id = 'up-' + Math.random().toString(36).substr(2, 9);
 
-    // Capture thumbnail URL at time of upload start
-    const thumbUrl = pendingThumbs.get(file.name) || '';
+    // Parse encoded or plain URL prefix from the filename
+    const { thumbUrl: parsedThumbUrl, nzbName } = parseFilenameWithThumb(file.name);
+
+    let resolvedThumbUrl = parsedThumbUrl;
+    const resolvedDisplayName = nzbName;
+
+    if (resolvedThumbUrl) {
+      // Pre-fill the per-row thumb input if the row already exists
+      const existingRow = mainContainer?.querySelector(`tr[data-name="${CSS.escape(file.name)}"]`);
+      const thumbInput = existingRow?.querySelector('.file-thumb-input') as HTMLInputElement | null;
+      if (thumbInput && !thumbInput.value) thumbInput.value = resolvedThumbUrl;
+      pendingThumbs.set(file.name, resolvedThumbUrl);
+    }
+
+    // Also honour any thumb URL already stored in the pending map (set via per-row input)
+    const thumbUrl = resolvedThumbUrl || pendingThumbs.get(file.name) || '';
 
     const ui = document.createElement('div');
     ui.className = 'upload-progress';
     ui.id = id;
     ui.innerHTML = `
       <div style="display:flex;justify-content:space-between">
-        <span class="upload-progress-text filename-display" style="color:var(--fg)">${file.name}</span>
+        <span class="upload-progress-text filename-display" style="color:var(--fg)">${resolvedDisplayName}</span>
         <span class="upload-progress-text pct">0%</span>
       </div>
       <div class="upload-progress-bar">
@@ -435,13 +474,13 @@ async function handleFiles(files: File[]) {
         const pctTxt = ui.querySelector('.pct') as HTMLElement;
         if (fill) fill.style.width = `${pct}%`;
         if (pctTxt) pctTxt.textContent = `${pct}%`;
-      });
+      }, thumbUrl || undefined);
       ui.remove();
     } catch (err: any) {
       (ui.querySelector('.upload-progress-fill') as HTMLElement)!.style.background = 'var(--error)';
       ui.querySelector('.pct')!.textContent = 'Error';
       (ui.querySelector('.pct') as HTMLElement)!.style.color = 'var(--error)';
-      (window as any).showToast(`Failed to upload ${file.name}: ${err.message}`, 'error');
+      (window as any).showToast(`Failed to upload ${resolvedDisplayName}: ${err.message}`, 'error');
       setTimeout(() => ui.remove(), 4000);
     }
 

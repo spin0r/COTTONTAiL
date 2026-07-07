@@ -26,13 +26,43 @@ const _accountInfo: Record<string, any> = {};
 const _startTime = Date.now();
 let _botInfo: any = null;
 
+// ─── Parse provider-prefix thumbnail token from a filename ───────────────────
+// Supported formats (prefix is the first space-delimited token):
+//
+//   DS_<hash>_thumb.jpg  Title.nzb   → https://drunkenslug.com/covers/sample/<hash>_thumb.jpg
+//   TR_<hash>_thumb.jpg  Title.nzb   → https://www.tabula-rasa.pw/covers/sample/<hash>_thumb.jpg
+//   https://...          Title.nzb   → plain URL (passed through as-is)
+//
+function resolveThumbPrefix(prefix: string): string | null {
+  if (prefix.startsWith("DS_")) return `https://drunkenslug.com/covers/sample/${prefix.slice(3)}`;
+  if (prefix.startsWith("TR_")) return `https://www.tabula-rasa.pw/covers/sample/${prefix.slice(3)}`;
+  if (/^https?:\/\//i.test(prefix)) return prefix;
+  return null;
+}
+
+function parseFilenamePrefix(original: string): { thumbUrl: string | null; nzbName: string } {
+  const trimmed = original.trim();
+  const spaceIdx = trimmed.indexOf(" ");
+  if (spaceIdx > 0) {
+    const prefix = trimmed.slice(0, spaceIdx);
+    const rest = trimmed.slice(spaceIdx + 1).trim();
+    if (rest.toLowerCase().endsWith(".nzb")) {
+      const thumbUrl = resolveThumbPrefix(prefix);
+      if (thumbUrl) return { thumbUrl, nzbName: rest };
+    }
+  }
+  return { thumbUrl: null, nzbName: path.basename(trimmed) };
+}
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
     cb(null, DOWNLOAD_DIR);
   },
   filename: (_req, file, cb) => {
-    cb(null, path.basename(file.originalname));
+    // Strip any encoded/plain URL prefix — save only the clean .nzb name
+    const { nzbName } = parseFilenamePrefix(file.originalname);
+    cb(null, nzbName);
   },
 });
 
@@ -40,7 +70,9 @@ const upload = multer({
   storage,
   limits: { fileSize: MAX_UPLOAD_SIZE },
   fileFilter: (_req, file, cb) => {
-    if (!file.originalname.toLowerCase().endsWith(".nzb")) {
+    // Check the actual .nzb name after stripping any URL prefix
+    const { nzbName } = parseFilenamePrefix(file.originalname);
+    if (!nzbName.toLowerCase().endsWith(".nzb")) {
       return cb(new Error("Only .nzb files are allowed"));
     }
     cb(null, true);
@@ -192,6 +224,14 @@ export async function startWebServer(bot: any): Promise<void> {
   });
 
   // File upload
+  // Accepts optional `thumbnail_url` text field alongside the .nzb file.
+  // If thumbnail_url starts with https?://, the image is downloaded and stored
+  // as a custom thumbnail keyed by the file's future msg_id — but at this stage
+  // the file hasn't been indexed yet (that happens in /upload-to-log or
+  // /upload-to-magic).  We just persist the URL in a temporary side-map so the
+  // subsequent action endpoint can pick it up.
+  const _pendingThumbUrls = new Map<string, string>(); // filename → thumbnail URL
+
   app.post("/upload", (req, res) => {
     upload.single("file")(req, res, async (err: any) => {
       if (err) {
@@ -199,7 +239,22 @@ export async function startWebServer(bot: any): Promise<void> {
         return res.status(400).json({ error: err.message });
       }
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-      res.json({ message: `Uploaded ${req.file.filename} (${req.file.size} bytes)`, filename: req.file.filename, size: req.file.size });
+
+      // Grab optional thumbnail_url from the multipart form field,
+      // or fall back to decoding it from the original filename prefix
+      const bodyThumbUrl = (req.body?.thumbnail_url ?? "").trim();
+      const { thumbUrl: nameThumbUrl } = parseFilenamePrefix(req.file.originalname ?? "");
+      const thumbUrl = bodyThumbUrl || nameThumbUrl || "";
+      if (thumbUrl && thumbUrl.startsWith("http")) {
+        _pendingThumbUrls.set(req.file.filename, thumbUrl);
+      }
+
+      res.json({
+        message: `Uploaded ${req.file.filename} (${req.file.size} bytes)`,
+        filename: req.file.filename,
+        size: req.file.size,
+        thumbnail_url: thumbUrl || null,
+      });
     });
   });
 
@@ -260,6 +315,11 @@ export async function startWebServer(bot: any): Promise<void> {
     const filepath = path.join(DOWNLOAD_DIR, filename);
     if (!fs.existsSync(filepath)) return res.status(404).json({ error: "File not found" });
 
+    // Optional thumbnail URL — can come from request body or pending map
+    const bodyThumbUrl = ((req.body as any)?.thumbnail_url ?? "").trim();
+    const pendingThumbUrl = _pendingThumbUrls.get(filename) ?? "";
+    const thumbUrl = bodyThumbUrl || pendingThumbUrl;
+
     try {
       const fileContent = fs.readFileSync(filepath);
       const client = new MagicClient(getMagicCookies());
@@ -269,16 +329,41 @@ export async function startWebServer(bot: any): Promise<void> {
         let logMsgId = 0;
         if (_bot && LOG_GROUP_ID) {
           try {
-            const logMsg = await _bot.api.sendDocument(LOG_GROUP_ID, new InputFile(fileContent, filename), { caption: `<code>${filename}</code>`, parse_mode: "HTML" });
+            const displayCaption = filename.replace(/\.nzb$/i, "");
+            const logMsg = await _bot.api.sendDocument(LOG_GROUP_ID, new InputFile(fileContent, filename), { caption: `<code>${displayCaption}</code>`, parse_mode: "HTML" });
             logMsgId = logMsg.message_id;
           } catch (e: any) { log.error("NZB", `Failed to send to log channel — ${e.message}`); }
         }
         try {
-          nzbDb.insertFile({ msg_id: logMsgId, file_name: filename, caption: filename, keywords: extractKeywords(filename, filename), file_type: "nzb" });
+          const displayCaption = filename.replace(/\.nzb$/i, "");
+          nzbDb.insertFile({ msg_id: logMsgId, file_name: filename, caption: displayCaption, keywords: extractKeywords(filename, displayCaption), file_type: "nzb" });
           markDirty();
           log.nzb(`Indexed: ${filename} (msg_id=${logMsgId}) via MagicNZB`);
           try { clearSearchCache(); } catch (_) {}
         } catch (dbErr: any) { log.error("NZB", `DB index error — ${dbErr.message}`); }
+
+        // Save thumbnail if provided
+        if (thumbUrl && logMsgId > 0) {
+          try {
+            const imgRes = await axios.get(thumbUrl, {
+              responseType: "arraybuffer",
+              timeout: 15000,
+              maxContentLength: 10 * 1024 * 1024,
+              headers: { "User-Agent": "Mozilla/5.0" },
+            });
+            const contentType = (imgRes.headers["content-type"] as string) || "image/jpeg";
+            const mime = contentType.split(";")[0].trim();
+            if (mime.startsWith("image/")) {
+              nzbDb.setCustomThumbnail(logMsgId, Buffer.from(imgRes.data as ArrayBuffer), mime);
+              markDirty();
+              log.thumb(`Saved thumbnail for msg_id=${logMsgId} from ${thumbUrl}`);
+            }
+          } catch (thumbErr: any) {
+            log.error("THUMB", `Failed to save thumbnail for ${filename} — ${thumbErr.message}`);
+          }
+          _pendingThumbUrls.delete(filename);
+        }
+
         res.json({ status: "success", message: `Uploaded ${filename} to MagicNZB`, msg_id: logMsgId });
       } else {
         res.status(502).json({ error: result?.error ?? "Unknown error" });
@@ -293,15 +378,44 @@ export async function startWebServer(bot: any): Promise<void> {
     if (!fs.existsSync(filepath)) return res.status(404).json({ error: "File not found" });
     if (!_bot || !LOG_GROUP_ID) return res.status(503).json({ error: "Bot or log channel not configured" });
 
+    // Optional thumbnail URL — from request body or pending upload map
+    const bodyThumbUrl = ((req.body as any)?.thumbnail_url ?? "").trim();
+    const pendingThumbUrl = _pendingThumbUrls.get(filename) ?? "";
+    const thumbUrl = bodyThumbUrl || pendingThumbUrl;
+
     try {
       const fileContent = fs.readFileSync(filepath);
-      const logMsg = await _bot.api.sendDocument(LOG_GROUP_ID, new InputFile(fileContent, filename), { caption: `<code>${filename}</code>`, parse_mode: "HTML" });
+      const displayCaption = filename.replace(/\.nzb$/i, "");
+      const logMsg = await _bot.api.sendDocument(LOG_GROUP_ID, new InputFile(fileContent, filename), { caption: `<code>${displayCaption}</code>`, parse_mode: "HTML" });
       const logMsgId = logMsg.message_id;
       try {
-        nzbDb.insertFile({ msg_id: logMsgId, file_name: filename, caption: filename, keywords: extractKeywords(filename, filename), file_type: "nzb" });
+        nzbDb.insertFile({ msg_id: logMsgId, file_name: filename, caption: displayCaption, keywords: extractKeywords(filename, displayCaption), file_type: "nzb" });
         markDirty();
         try { clearSearchCache(); } catch (_) {}
       } catch (dbErr: any) { log.error("NZB", `DB index error — ${dbErr.message}`); }
+
+      // Save thumbnail if provided
+      if (thumbUrl) {
+        try {
+          const imgRes = await axios.get(thumbUrl, {
+            responseType: "arraybuffer",
+            timeout: 15000,
+            maxContentLength: 10 * 1024 * 1024,
+            headers: { "User-Agent": "Mozilla/5.0" },
+          });
+          const contentType = (imgRes.headers["content-type"] as string) || "image/jpeg";
+          const mime = contentType.split(";")[0].trim();
+          if (mime.startsWith("image/")) {
+            nzbDb.setCustomThumbnail(logMsgId, Buffer.from(imgRes.data as ArrayBuffer), mime);
+            markDirty();
+            log.thumb(`Saved thumbnail for msg_id=${logMsgId} from ${thumbUrl}`);
+          }
+        } catch (thumbErr: any) {
+          log.error("THUMB", `Failed to save thumbnail for ${filename} — ${thumbErr.message}`);
+        }
+        _pendingThumbUrls.delete(filename);
+      }
+
       res.json({ status: "success", message: `Sent ${filename} to log group`, msg_id: logMsgId });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });

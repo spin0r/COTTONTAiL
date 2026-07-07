@@ -99,7 +99,7 @@ export const api = {
 
 // ─── Upload file via FormData ─────────────────────────────────────
 
-export async function uploadFile(file: File, onProgress?: (pct: number) => void): Promise<void> {
+export async function uploadFile(file: File, onProgress?: (pct: number) => void, thumbnailUrl?: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/upload");
@@ -118,6 +118,9 @@ export async function uploadFile(file: File, onProgress?: (pct: number) => void)
     xhr.onerror = () => reject(new Error("Network error"));
     const fd = new FormData();
     fd.append("file", file);
+    if (thumbnailUrl && thumbnailUrl.startsWith("http")) {
+      fd.append("thumbnail_url", thumbnailUrl);
+    }
     xhr.send(fd);
   });
 }

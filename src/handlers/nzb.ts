@@ -81,6 +81,45 @@ function generateLogsMessage(results: NzbRecord[], page = 1, header: string | nu
 
 // ─── NZB Upload Handler ───────────────────────────────────────────────────────
 
+// ─── Caption / filename parser ────────────────────────────────────────────────
+// Supported prefix formats (first space-delimited token before the .nzb title):
+//
+//   DS_<hash>_thumb.jpg  Title.nzb   → https://drunkenslug.com/covers/sample/<hash>_thumb.jpg
+//   TR_<hash>_thumb.jpg  Title.nzb   → https://www.tabula-rasa.pw/covers/sample/<hash>_thumb.jpg
+//   https://...          Title.nzb   → plain URL passed through as-is
+//
+// Returns { thumbnailUrl, displayName } — displayName has .nzb stripped.
+
+function resolveThumbPrefix(prefix: string): string | null {
+  if (prefix.startsWith("DS_")) return `https://drunkenslug.com/covers/sample/${prefix.slice(3)}`;
+  if (prefix.startsWith("TR_")) return `https://www.tabula-rasa.pw/covers/sample/${prefix.slice(3)}`;
+  if (/^https?:\/\//i.test(prefix)) return prefix;
+  return null;
+}
+
+function parseCaptionWithUrl(caption: string, fallbackName: string): { thumbnailUrl: string | null; displayName: string } {
+  const trimmed = caption.trim();
+
+  const spaceIdx = trimmed.indexOf(" ");
+  if (spaceIdx > 0) {
+    const prefix = trimmed.slice(0, spaceIdx);
+    const rest = trimmed.slice(spaceIdx + 1).trim();
+    const thumbnailUrl = resolveThumbPrefix(prefix);
+    if (thumbnailUrl) {
+      const displayName = rest.replace(/\.nzb$/i, "");
+      return { thumbnailUrl, displayName };
+    }
+  }
+
+  // No recognised prefix — treat whole caption as display name
+  if (trimmed) {
+    return { thumbnailUrl: null, displayName: trimmed.replace(/\.nzb$/i, "") };
+  }
+
+  // No caption — fall back to actual filename
+  return { thumbnailUrl: null, displayName: fallbackName.replace(/\.nzb$/i, "") };
+}
+
 export const handleNzbUpload = async (ctx: Context): Promise<boolean> => {
   const document = (ctx.message as any)?.document;
   if (!document) return false;
@@ -88,18 +127,22 @@ export const handleNzbUpload = async (ctx: Context): Promise<boolean> => {
   if (!fileName.toLowerCase().endsWith(".nzb")) return false;
   if (!LOG_GROUP_ID) return false;
 
-  const caption: string = (ctx.message as any).caption ?? "";
-  let displayName = caption.trim() || fileName;
-  if (caption && !displayName.toLowerCase().endsWith(".nzb")) displayName += ".nzb";
+  const rawCaption: string = (ctx.message as any).caption ?? "";
+  const { thumbnailUrl, displayName: parsedName } = parseCaptionWithUrl(rawCaption, fileName);
+
+  // displayName for DB/caption is the clean title WITHOUT .nzb extension
+  // file_name stored in DB keeps .nzb for grabs
+  const displayName = parsedName; // no .nzb — clean title
+  const fileNameWithExt = displayName.toLowerCase().endsWith(".nzb") ? displayName : displayName + ".nzb";
 
   try {
     const logMsg = await ctx.api.copyMessage(LOG_GROUP_ID, ctx.chat!.id, ctx.message!.message_id, {
-      caption: `<code>${displayName}</code>`,
+      caption: `<code>${escapeHtml(displayName)}</code>`,
       parse_mode: "HTML",
     });
     const logMsgId = logMsg.message_id;
-    const keywords = extractKeywords(displayName, caption);
-    db.insertFile({ msg_id: logMsgId, file_name: displayName, caption, keywords, file_type: "nzb" });
+    const keywords = extractKeywords(fileNameWithExt, displayName);
+    db.insertFile({ msg_id: logMsgId, file_name: fileNameWithExt, caption: displayName, keywords, file_type: "nzb" });
     markDirty();
     SEARCH_CACHE.clear();
 
@@ -109,6 +152,27 @@ export const handleNzbUpload = async (ctx: Context): Promise<boolean> => {
       { parse_mode: "HTML" }
     );
 
+    // Save thumbnail if a URL was found in the caption
+    if (thumbnailUrl) {
+      try {
+        const imgRes = await axios.get(thumbnailUrl, {
+          responseType: "arraybuffer",
+          timeout: 15000,
+          maxContentLength: 10 * 1024 * 1024,
+          headers: { "User-Agent": "Mozilla/5.0" },
+        });
+        const contentType = (imgRes.headers["content-type"] as string) || "image/jpeg";
+        const mime = contentType.split(";")[0].trim();
+        if (mime.startsWith("image/")) {
+          db.setCustomThumbnail(logMsgId, Buffer.from(imgRes.data as ArrayBuffer), mime);
+          markDirty();
+          console.log(`[NZB] Saved thumbnail for msg_id=${logMsgId} from ${thumbnailUrl}`);
+        }
+      } catch (thumbErr: any) {
+        console.error("[NZB] Thumbnail save failed:", thumbErr.message);
+      }
+    }
+
     try {
       const fileObj = await ctx.api.getFile(document.file_id);
       const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${fileObj.file_path}`;
@@ -116,7 +180,7 @@ export const handleNzbUpload = async (ctx: Context): Promise<boolean> => {
       const fileContent = Buffer.from(res.data as ArrayBuffer);
       const userId = ctx.from!.id;
       const client = getClient(userId);
-      const result = await client.uploadNzb(fileContent, displayName);
+      const result = await client.uploadNzb(fileContent, fileNameWithExt);
 
       if (result?.status === "success") {
         await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id,
