@@ -523,8 +523,8 @@ export async function startWebServer(bot: any): Promise<void> {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
-  // ─── Custom thumbnail: store (POST) ──────────────────────────────
-  app.post("/api/logs/:msg_id/custom-thumbnail", async (req, res) => {
+  // ─── Sample image: store (POST) ─────────────────────────────────
+  app.post("/api/logs/:msg_id/sample", async (req, res) => {
     const msgId = parseInt(req.params.msg_id, 10);
     if (isNaN(msgId)) return res.status(400).json({ error: "Invalid ID" });
 
@@ -558,8 +558,8 @@ export async function startWebServer(bot: any): Promise<void> {
     }
   });
 
-  // ─── Custom thumbnail: serve (GET) ───────────────────────────────
-  app.get("/api/logs/:msg_id/custom-thumbnail", (req, res) => {
+  // ─── Sample image: serve (GET) ───────────────────────────────────
+  app.get("/api/logs/:msg_id/sample", (req, res) => {
     const msgId = parseInt(req.params.msg_id, 10);
     if (isNaN(msgId)) return res.status(400).json({ error: "Invalid ID" });
 

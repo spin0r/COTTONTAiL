@@ -107,7 +107,7 @@ function renderTable(logs: LogEntry[], total: number) {
           <div class="cell-name filename-display">
             <span class="log-name-link cell-name-link">${l.file_name}</span>
             ${l.has_custom_thumbnail
-              ? `<span class="custom-thumb-dot" title="Has custom thumbnail"></span>`
+              ? `<span class="custom-thumb-dot" title="Has sample image"></span>`
               : ''}
             ${l.link
               ? `<a href="${l.link}" target="_blank" class="log-tg-link" title="Open in Telegram" style="color:var(--fg-3);margin-left:6px;vertical-align:middle;display:inline-flex;opacity:.6" tabindex="-1">${iconTelegram()}</a>`
@@ -125,7 +125,7 @@ function renderTable(logs: LogEntry[], total: number) {
             <button class="btn-icon btn-grab" title="Grab to MagicNZB">${iconDownload()}</button>
             <button class="btn-icon btn-rename" title="Rename">${iconEdit()}</button>
             <button class="btn-icon btn-ai-rename" title="AI Smart Rename">${iconSparkle()}</button>
-            <button class="btn-icon btn-backfill" title="Set Custom Thumbnail" style="${l.has_custom_thumbnail ? 'color:var(--success)' : ''}">${iconImage()}</button>
+            <button class="btn-icon btn-backfill" title="Set Sample Image" style="${l.has_custom_thumbnail ? 'color:var(--success)' : ''}">${iconImage()}</button>
             <button class="btn-icon btn-delete" title="Delete">${iconTrash()}</button>
           </div>
           <div class="action-loading" style="display:none;justify-content:flex-end;padding-right:12px">
@@ -142,7 +142,7 @@ function showThumbModal(msgId: number, fileName: string, telegramLink: string, h
   // slides: [ { label, url, type } ]
   const slides = [
     { label: 'ThePornDB', url: api.logThumbnailUrl(msgId), preload: true },
-    ...(hasCustom ? [{ label: 'Custom', url: api.logCustomThumbnailUrl(msgId), preload: false }] : []),
+    ...(hasCustom ? [{ label: 'Sample', url: api.logCustomThumbnailUrl(msgId), preload: false }] : []),
   ];
   let current = 0;
 
@@ -169,7 +169,7 @@ function showThumbModal(msgId: number, fileName: string, telegramLink: string, h
           </div>
         </div>
         <div class="log-thumb-actions">
-          <button class="btn btn-ghost" id="btn-set-custom" style="font-size:12px">${iconImage()} Set Custom Image</button>
+          <button class="btn btn-ghost" id="btn-set-custom" style="font-size:12px">${iconImage()} Set Sample Image</button>
           ${telegramLink ? `<a href="${telegramLink}" target="_blank" class="btn btn-ghost" style="font-size:12px">Open in Telegram</a>` : ''}
         </div>
       </div>
@@ -212,7 +212,7 @@ function showThumbModal(msgId: number, fileName: string, telegramLink: string, h
       spinner.remove();
       const empty = document.createElement('div');
       empty.className = 'log-thumb-empty';
-      empty.textContent = slide.label === 'Custom' ? 'No custom thumbnail' : 'No match on ThePornDB';
+      empty.textContent = slide.label === 'Sample' ? 'No sample image' : 'No match on ThePornDB';
       viewer.appendChild(empty);
     };
     img.src = slide.url;
@@ -249,21 +249,21 @@ function showThumbModal(msgId: number, fileName: string, telegramLink: string, h
   };
   document.addEventListener('keydown', keyHandler, true);
 
-  // Set custom image
-  modal.querySelector('#btn-set-custom')?.addEventListener('click', () => {
+  // Set Sample Image
+  modal.querySelector('#btn-set-Custom')?.addEventListener('click', () => {
     close();
     showSetCustomModal(msgId, fileName);
   });
 }
 
-// ─── Set custom thumbnail modal ──────────────────────────────────
+// ─── Set Sample Image modal ──────────────────────────────────
 function showSetCustomModal(msgId: number, fileName: string) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.innerHTML = `
     <div class="modal" style="max-width:480px">
       <div class="modal-header">
-        <div class="modal-title">Set Custom Thumbnail</div>
+        <div class="modal-title">Set Sample Image</div>
         <button class="modal-close" id="sc-close">${iconX()}</button>
       </div>
       <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
@@ -305,7 +305,27 @@ function showSetCustomModal(msgId: number, fileName: string) {
       statusEl.style.color = 'var(--success)';
       statusEl.textContent = `✓ Saved (${(res.size / 1024).toFixed(1)} KB, ${res.mime})`;
       saveBtn.textContent = 'Saved!';
-      setTimeout(() => { close(); loadData(); }, 800);
+      setTimeout(() => {
+        close();
+        // Update green dot in-place on the row — no full reload
+        const row = mainContainer?.querySelector(`tr[data-id="${msgId}"]`);
+        if (row) {
+          row.setAttribute('data-has-custom', '1');
+          // Add green dot if not already there
+          if (!row.querySelector('.Custom-thumb-dot')) {
+            const nameDiv = row.querySelector('.filename-display');
+            if (nameDiv) {
+              const dot = document.createElement('span');
+              dot.className = 'Custom-thumb-dot';
+              dot.title = 'Has sample image';
+              nameDiv.appendChild(dot);
+            }
+          }
+          // Turn the backfill button green
+          const backfillBtn = row.querySelector('.btn-backfill') as HTMLElement | null;
+          if (backfillBtn) backfillBtn.style.color = 'var(--success)';
+        }
+      }, 800);
     } catch (err: any) {
       statusEl.style.color = 'var(--error)';
       statusEl.textContent = `✗ ${err.message}`;
@@ -343,7 +363,7 @@ function attachEvents() {
       return;
     }
 
-    // Backfill button → open set custom modal directly
+    // Backfill button → open set Custom modal directly
     if (target.closest('.btn-backfill')) {
       const nameEl = tr.querySelector('.log-name-link') as HTMLElement;
       showSetCustomModal(id, nameEl?.textContent?.trim() || '');
