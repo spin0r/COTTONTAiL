@@ -15,6 +15,7 @@ import * as nzbDb from "../nzb/db";
 import { extractKeywords } from "../nzb/utils";
 import { markDirty } from "../nzb/backup";
 import { clearSearchCache } from "../handlers/nzb";
+import { userbotDeleteMessage, isUserbotConfigured } from "./userbot";
 
 const UPLOAD_PORT = parseInt(process.env.PORT ?? process.env.UPLOAD_PORT ?? "10000", 10);
 const DOWNLOAD_DIR = process.env.DOWNLOAD_DIR ?? "nzb_downloads";
@@ -600,16 +601,30 @@ export async function startWebServer(bot: any): Promise<void> {
       if (!record) return res.status(404).json({ error: "Log entry not found" });
 
       let telegramOk = false;
-      if (_bot && LOG_GROUP_ID && msgId > 0) {
-        try { await _bot.api.deleteMessage(LOG_GROUP_ID, msgId); telegramOk = true; }
-        catch (e: any) { log.error("NZB", `Failed to delete from log channel (msg_id=${msgId}) — ${e.message}`); }
+      let telegramError = "";
+      if (LOG_GROUP_ID && msgId > 0) {
+        // 1st try: Bot API deleteMessage
+        if (_bot) {
+          try { await _bot.api.deleteMessage(LOG_GROUP_ID, msgId); telegramOk = true; }
+          catch (e: any) {
+            const errCode = e?.error_code ?? e?.status ?? e?.code ?? "?";
+            const errDesc = e?.description ?? e?.message ?? String(e);
+            telegramError = `[${errCode}] ${errDesc}`;
+            log.error("NZB", `Bot API delete failed (msg_id=${msgId}) — ${telegramError}`);
+          }
+        }
+        // 2nd try: MTProto userbot (handles old copyMessage msgs the bot can't delete)
+        if (!telegramOk && isUserbotConfigured()) {
+          const ok = await userbotDeleteMessage(LOG_GROUP_ID, msgId);
+          if (ok) { telegramOk = true; telegramError = ""; }
+        }
       }
 
       const result = nzbDb.deleteByMsgId(msgId);
       markDirty();
       try { clearSearchCache(); } catch (_) {}
 
-      res.json({ success: true, telegram_deleted: telegramOk, db_deleted: result.changes > 0 });
+      res.json({ success: true, telegram_deleted: telegramOk, db_deleted: result.changes > 0, ...(telegramError ? { telegram_error: telegramError } : {}) });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 

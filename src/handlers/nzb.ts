@@ -135,7 +135,7 @@ export const handleNzbUpload = async (ctx: Context): Promise<boolean> => {
   const fileNameWithExt = displayName;
 
   try {
-    const logMsg = await ctx.api.copyMessage(LOG_GROUP_ID, ctx.chat!.id, ctx.message!.message_id, {
+    const logMsg = await ctx.api.sendDocument(LOG_GROUP_ID, document.file_id, {
       caption: `<code>${escapeHtml(displayName)}</code>`,
       parse_mode: "HTML",
     });

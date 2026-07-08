@@ -42,7 +42,7 @@ export const handleDocument = restricted(async (ctx: Context) => {
     const fileContent = Buffer.from(res.data as ArrayBuffer);
 
     if (LOG_GROUP_ID) {
-      await forwardToLogGroup(ctx, ctx.chat!.id, ctx.message!.message_id, uploadName);
+      await forwardToLogGroup(ctx, ctx.chat!.id, ctx.message!.message_id, uploadName, document.file_id);
     }
 
     await StatusManager.setHeader(userId, `upload_${uploadName}`, `📤 Uploading: ${uploadName}`);
@@ -102,7 +102,7 @@ async function processAlbum(api: any, mgId: string, ctx: any): Promise<void> {
       const fileContent = Buffer.from(res.data as ArrayBuffer);
 
       if (LOG_GROUP_ID) {
-        await forwardToLogGroup({ api }, chatId, msg.message_id, uploadName);
+        await forwardToLogGroup({ api }, chatId, msg.message_id, uploadName, doc.file_id);
       }
 
       const result = await client.uploadNzb(fileContent, uploadName);

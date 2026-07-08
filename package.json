@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "backfill": "ts-node src/nzb/indexer.ts",
     "frontend:dev": "cd frontend && npm run dev",
-    "frontend:build": "cd frontend && npm run build"
+    "frontend:build": "cd frontend && npm run build",
+    "generate-session": "ts-node src/utils/generate-session.ts"
   },
   "dependencies": {
     "archiver": "^6.0.1",

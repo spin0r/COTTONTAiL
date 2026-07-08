@@ -292,16 +292,26 @@ export async function forwardToLogGroup(
   bot: { api: any },
   fromChatId: number,
   messageId: number,
-  fileName: string | null = null
+  fileName: string | null = null,
+  fileId: string | null = null
 ): Promise<void> {
   if (!LOG_GROUP_ID) return;
   const caption = fileName ? `<code>${fileName}</code>` : null;
   await withLogLock(async () => {
     try {
-      await bot.api.copyMessage(LOG_GROUP_ID, fromChatId, messageId, {
-        caption,
-        parse_mode: "HTML",
-      });
+      if (fileId) {
+        // sendDocument makes the message "from the bot" → deletable by the bot
+        await bot.api.sendDocument(LOG_GROUP_ID, fileId, {
+          caption,
+          parse_mode: "HTML",
+        });
+      } else {
+        // Fallback: copyMessage (message may not be deletable by the bot in channels)
+        await bot.api.copyMessage(LOG_GROUP_ID, fromChatId, messageId, {
+          caption,
+          parse_mode: "HTML",
+        });
+      }
     } catch (e: any) {
       console.error("Log group copy failed:", e.message);
     }

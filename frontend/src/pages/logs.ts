@@ -454,7 +454,8 @@ function attachEvents() {
                   <button class="modal-close" id="tg-warn-close">${iconX()}</button>
                 </div>
                 <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
-                  <p style="font-size:13px;color:var(--fg-2)">The entry was removed from the database, but the Telegram message could not be deleted (bot may lack permission or the message is too old).</p>
+                  <p style="font-size:13px;color:var(--fg-2)">The entry was removed from the database, but the Telegram message could not be deleted.</p>
+                  ${res.telegram_error ? `<p style="font-size:12px;color:var(--error);font-family:monospace;padding:6px 8px;background:var(--bg-2);border-radius:6px;margin:0">${res.telegram_error}</p>` : `<p style="font-size:12px;color:var(--fg-3)">Bot may lack permission or the message is too old.</p>`}
                   ${link ? `
                     <div style="font-size:12px;color:var(--fg-3)">Delete it manually:</div>
                     <a href="${link}" target="_blank" class="btn btn-ghost" style="word-break:break-all;font-size:12px;text-align:left">${link}</a>
