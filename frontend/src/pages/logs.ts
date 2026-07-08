@@ -250,7 +250,7 @@ function showThumbModal(msgId: number, fileName: string, telegramLink: string, h
   document.addEventListener('keydown', keyHandler, true);
 
   // Set Sample Image
-  modal.querySelector('#btn-set-Custom')?.addEventListener('click', () => {
+  modal.querySelector('#btn-set-custom')?.addEventListener('click', () => {
     close();
     showSetCustomModal(msgId, fileName);
   });
@@ -288,6 +288,23 @@ function showSetCustomModal(msgId: number, fileName: string) {
   modal.querySelector('#sc-cancel')?.addEventListener('click', close);
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 
+  // Auto-detect URL in clipboard and pre-fill
+  const urlInput = modal.querySelector('#sc-url') as HTMLInputElement;
+  navigator.clipboard.readText().then(text => {
+    const trimmed = text.trim();
+    if (/^https?:\/\/.+/i.test(trimmed)) {
+      urlInput.value = trimmed;
+    }
+  }).catch(() => { /* clipboard access denied — silently ignore */ });
+
+  // Enter key triggers save
+  urlInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      (modal.querySelector('#sc-save') as HTMLButtonElement)?.click();
+    }
+  });
+
   modal.querySelector('#sc-save')?.addEventListener('click', async () => {
     const url = (modal.querySelector('#sc-url') as HTMLInputElement).value.trim();
     if (!url) return;
@@ -312,11 +329,11 @@ function showSetCustomModal(msgId: number, fileName: string) {
         if (row) {
           row.setAttribute('data-has-custom', '1');
           // Add green dot if not already there
-          if (!row.querySelector('.Custom-thumb-dot')) {
+          if (!row.querySelector('.custom-thumb-dot')) {
             const nameDiv = row.querySelector('.filename-display');
             if (nameDiv) {
               const dot = document.createElement('span');
-              dot.className = 'Custom-thumb-dot';
+              dot.className = 'custom-thumb-dot';
               dot.title = 'Has sample image';
               nameDiv.appendChild(dot);
             }
