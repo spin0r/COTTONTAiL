@@ -270,7 +270,7 @@ function showSetCustomModal(msgId: number, fileName: string) {
         <div style="font-size:12px;color:var(--fg-2);word-break:break-all">${fileName}</div>
         <div>
           <label style="font-size:11px;color:var(--fg-3);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Image URL</label>
-          <input id="sc-url" type="url" class="search-input" style="width:100%" placeholder="https://example.com/poster.jpg">
+          <input id="sc-url" type="text" class="search-input" style="width:100%" placeholder="https://example.com/poster.jpg">
           <div style="font-size:11px;color:var(--fg-3);margin-top:4px">Downloaded once and stored permanently in the database — survives redeploys.</div>
         </div>
         <div id="sc-status" style="font-size:12px;display:none"></div>
@@ -283,34 +283,29 @@ function showSetCustomModal(msgId: number, fileName: string) {
   `;
   document.body.appendChild(modal);
 
+  const urlInput = modal.querySelector('#sc-url') as HTMLInputElement;
+  const saveBtn  = modal.querySelector('#sc-save') as HTMLButtonElement;
+  const statusEl = modal.querySelector('#sc-status') as HTMLElement;
+
   const close = () => modal.remove();
   modal.querySelector('#sc-close')?.addEventListener('click', close);
   modal.querySelector('#sc-cancel')?.addEventListener('click', close);
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 
-  // Auto-detect URL in clipboard and pre-fill
-  const urlInput = modal.querySelector('#sc-url') as HTMLInputElement;
+  // Auto-detect URL in clipboard and pre-fill, then focus
   navigator.clipboard.readText().then(text => {
     const trimmed = text.trim();
     if (/^https?:\/\/.+/i.test(trimmed)) {
       urlInput.value = trimmed;
     }
   }).catch(() => { /* clipboard access denied — silently ignore */ });
+  urlInput.focus();
 
-  // Enter key triggers save
-  urlInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      (modal.querySelector('#sc-save') as HTMLButtonElement)?.click();
-    }
-  });
+  // Shared save logic used by both Enter key and button click
+  async function doSave() {
+    const url = urlInput.value.trim();
+    if (!url || saveBtn.disabled) return;
 
-  modal.querySelector('#sc-save')?.addEventListener('click', async () => {
-    const url = (modal.querySelector('#sc-url') as HTMLInputElement).value.trim();
-    if (!url) return;
-
-    const saveBtn  = modal.querySelector('#sc-save') as HTMLButtonElement;
-    const statusEl = modal.querySelector('#sc-status') as HTMLElement;
     saveBtn.disabled = true;
     saveBtn.textContent = 'Downloading…';
     statusEl.style.display = 'block';
@@ -328,7 +323,6 @@ function showSetCustomModal(msgId: number, fileName: string) {
         const row = mainContainer?.querySelector(`tr[data-id="${msgId}"]`);
         if (row) {
           row.setAttribute('data-has-custom', '1');
-          // Add green dot if not already there
           if (!row.querySelector('.custom-thumb-dot')) {
             const nameDiv = row.querySelector('.filename-display');
             if (nameDiv) {
@@ -338,7 +332,6 @@ function showSetCustomModal(msgId: number, fileName: string) {
               nameDiv.appendChild(dot);
             }
           }
-          // Turn the backfill button green
           const backfillBtn = row.querySelector('.btn-backfill') as HTMLElement | null;
           if (backfillBtn) backfillBtn.style.color = 'var(--success)';
         }
@@ -349,7 +342,23 @@ function showSetCustomModal(msgId: number, fileName: string) {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Download & Save';
     }
-  });
+  }
+
+  // Capture-phase keydown on the modal overlay — catches Enter/Escape
+  // before any other handler on document can see them
+  modal.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      doSave();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      close();
+    }
+  }, true);  // ← capture phase
+
+  saveBtn.addEventListener('click', doSave);
 }
 
 function attachEvents() {
