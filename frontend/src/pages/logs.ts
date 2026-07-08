@@ -432,8 +432,12 @@ function attachEvents() {
     if (target.closest('.btn-ai-rename')) {
       await performAction(tr, async () => {
         const res = await api.aiRenameLog(id);
+        // Update name in-place without reloading the full list
+        const nameSpan = tr.querySelector('.log-name-link') as HTMLElement;
+        if (nameSpan) nameSpan.textContent = res.new_name;
+        const renameInput = tr.querySelector('.inline-rename') as HTMLInputElement;
+        if (renameInput) renameInput.value = res.new_name.replace(/\.nzb$/i, '');
         (window as any).showToast(`Renamed to: ${res.new_name}`, 'success');
-        loadData();
       });
       return;
     }
@@ -474,8 +478,27 @@ function attachEvents() {
           } else {
             (window as any).showToast('Entry deleted', 'success');
           }
-          loadData();
+          // Remove the row in-place without reloading the full list
+          tr.remove();
           loadStats();
+          // If table is now empty, show the empty state
+          const tbody = mainContainer?.querySelector('#logs-tbody');
+          if (tbody && tbody.children.length === 0) {
+            const tableWrap = mainContainer?.querySelector('.table-wrap') as HTMLElement;
+            const empty = mainContainer?.querySelector('#logs-empty') as HTMLElement;
+            if (tableWrap) tableWrap.style.display = 'none';
+            if (empty) {
+              empty.style.display = 'block';
+              empty.innerHTML = `<div class="empty">${iconClipboard()}<p>No results found.</p></div>`;
+            }
+          }
+          // Update the result count
+          const tbody2 = mainContainer?.querySelector('#logs-tbody');
+          const countEl = mainContainer?.querySelector('#search-count');
+          if (countEl && tbody2) {
+            const remaining = tbody2.children.length;
+            countEl.textContent = `${remaining} result${remaining !== 1 ? 's' : ''}`;
+          }
         });
       }
       return;
