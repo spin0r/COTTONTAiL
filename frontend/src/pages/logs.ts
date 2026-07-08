@@ -137,7 +137,7 @@ function renderTable(logs: LogEntry[], total: number) {
               ? `<a href="${l.link}" target="_blank" class="log-tg-link" title="Open in Telegram" style="color:var(--fg-3);margin-left:6px;vertical-align:middle;display:inline-flex;opacity:.6" tabindex="-1">${iconTelegram()}</a>`
               : ''}
           </div>
-          <div class="filename-edit" style="display:none;align-items:center;gap:6px">
+          <div class="filename-edit" style="display:none;align-items:center;gap:6px;width:100%">
             <input type="text" class="inline-rename" value="${(l.caption || l.file_name).replace(/\.nzb$/i, '')}">
             <span class="inline-rename-ext" style="color:var(--fg-3);font-size:13px;white-space:nowrap;user-select:none">.nzb</span>
             <button class="btn-icon btn-rename-save" style="color:var(--success)">${iconCheck()}</button>
@@ -486,7 +486,8 @@ function attachEvents() {
       editDiv.style.display = 'flex';
       const input = editDiv.querySelector('input')!;
       input.focus();
-      input.select();
+      const len = input.value.length;
+      input.setSelectionRange(len, len);
       return;
     }
 
