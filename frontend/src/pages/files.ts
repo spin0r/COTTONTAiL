@@ -374,7 +374,7 @@ function showSendToLogModal(tr: HTMLElement, name: string) {
             style="width:100%"
             placeholder="https://example.com/poster.jpg"
           >
-          <div style="font-size:11px;color:var(--fg-3);margin-top:4px">Paste a direct image URL — it will be downloaded and stored permanently.</div>
+          <div style="font-size:11px;color:var(--fg-3);margin-top:4px">Paste a direct image URL — only the URL will be stored in the database.</div>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button class="btn btn-ghost" id="stl-cancel">Cancel</button>
