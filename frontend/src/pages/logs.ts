@@ -331,15 +331,15 @@ function showSetCustomModal(msgId: number, fileName: string) {
     if (!url || saveBtn.disabled) return;
 
     saveBtn.disabled = true;
-    saveBtn.textContent = 'Downloading…';
+    saveBtn.textContent = 'Saving…';
     statusEl.style.display = 'block';
     statusEl.style.color = 'var(--fg-3)';
-    statusEl.textContent = 'Downloading and storing image…';
+    statusEl.textContent = 'Saving thumbnail URL…';
 
     try {
       const res = await api.setCustomThumbnail(msgId, url);
       statusEl.style.color = 'var(--success)';
-      statusEl.textContent = `✓ Saved (${(res.size / 1024).toFixed(1)} KB, ${res.mime})`;
+      statusEl.textContent = '✓ Thumbnail URL saved';
       saveBtn.textContent = 'Saved!';
       setTimeout(() => {
         close();

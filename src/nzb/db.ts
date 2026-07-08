@@ -81,6 +81,10 @@ export function init(): Database.Database {
     db.exec(`ALTER TABLE nzb_meta ADD COLUMN custom_thumbnail_mime TEXT DEFAULT NULL`);
     log.db("Migration: added custom_thumbnail_mime column");
   }
+  if (!cols.includes("custom_thumbnail_url")) {
+    db.exec(`ALTER TABLE nzb_meta ADD COLUMN custom_thumbnail_url TEXT DEFAULT NULL`);
+    log.db("Migration: added custom_thumbnail_url column");
+  }
 
   log.db(`Initialized at ${DB_PATH}`);
   return db;
@@ -212,33 +216,32 @@ export function deleteByMsgId(msgId: number): Database.RunResult {
   return _deleteByMsgIdStmt.run(msgId);
 }
 
-export function setCustomThumbnail(msgId: number, data: Buffer, mime: string): void {
+export function setCustomThumbnail(msgId: number, url: string): void {
   const d = ensureDb();
   if (!_setCustomThumbStmt) {
     _setCustomThumbStmt = d.prepare(`
-      UPDATE nzb_meta SET custom_thumbnail = @data, custom_thumbnail_mime = @mime WHERE msg_id = @msg_id
+      UPDATE nzb_meta SET custom_thumbnail_url = @url, custom_thumbnail = NULL, custom_thumbnail_mime = NULL WHERE msg_id = @msg_id
     `);
   }
-  _setCustomThumbStmt.run({ msg_id: msgId, data, mime });
+  _setCustomThumbStmt.run({ msg_id: msgId, url });
 }
 
-export function getCustomThumbnail(msgId: number): { data: Buffer; mime: string } | null {
+export function getCustomThumbnailUrl(msgId: number): string | null {
   const d = ensureDb();
   if (!_getCustomThumbStmt) {
     _getCustomThumbStmt = d.prepare(`
-      SELECT custom_thumbnail, custom_thumbnail_mime FROM nzb_meta WHERE msg_id = ?
+      SELECT custom_thumbnail_url FROM nzb_meta WHERE msg_id = ?
     `);
   }
-  const row = _getCustomThumbStmt.get(msgId) as { custom_thumbnail: Buffer | null; custom_thumbnail_mime: string | null } | undefined;
-  if (!row?.custom_thumbnail) return null;
-  return { data: row.custom_thumbnail, mime: row.custom_thumbnail_mime || "image/jpeg" };
+  const row = _getCustomThumbStmt.get(msgId) as { custom_thumbnail_url: string | null } | undefined;
+  return row?.custom_thumbnail_url ?? null;
 }
 
 export function hasCustomThumbnail(msgId: number): boolean {
   const d = ensureDb();
   if (!_hasCustomThumbStmt) {
     _hasCustomThumbStmt = d.prepare(`
-      SELECT 1 FROM nzb_meta WHERE msg_id = ? AND custom_thumbnail IS NOT NULL
+      SELECT 1 FROM nzb_meta WHERE msg_id = ? AND custom_thumbnail_url IS NOT NULL
     `);
   }
   return !!_hasCustomThumbStmt.get(msgId);

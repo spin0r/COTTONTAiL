@@ -155,21 +155,11 @@ export const handleNzbUpload = async (ctx: Context): Promise<boolean> => {
     // Save thumbnail if a URL was found in the caption
     if (thumbnailUrl) {
       try {
-        const imgRes = await axios.get(thumbnailUrl, {
-          responseType: "arraybuffer",
-          timeout: 15000,
-          maxContentLength: 10 * 1024 * 1024,
-          headers: { "User-Agent": "Mozilla/5.0" },
-        });
-        const contentType = (imgRes.headers["content-type"] as string) || "image/jpeg";
-        const mime = contentType.split(";")[0].trim();
-        if (mime.startsWith("image/")) {
-          db.setCustomThumbnail(logMsgId, Buffer.from(imgRes.data as ArrayBuffer), mime);
-          markDirty();
-          console.log(`[NZB] Saved thumbnail for msg_id=${logMsgId} from ${thumbnailUrl}`);
-        }
+        db.setCustomThumbnail(logMsgId, thumbnailUrl);
+        markDirty();
+        console.log(`[NZB] Saved thumbnail URL for msg_id=${logMsgId}: ${thumbnailUrl}`);
       } catch (thumbErr: any) {
-        console.error("[NZB] Thumbnail save failed:", thumbErr.message);
+        console.error("[NZB] Thumbnail URL save failed:", thumbErr.message);
       }
     }
 

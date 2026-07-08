@@ -345,21 +345,11 @@ export async function startWebServer(bot: any): Promise<void> {
         // Save thumbnail if provided
         if (thumbUrl && logMsgId > 0) {
           try {
-            const imgRes = await axios.get(thumbUrl, {
-              responseType: "arraybuffer",
-              timeout: 15000,
-              maxContentLength: 10 * 1024 * 1024,
-              headers: { "User-Agent": "Mozilla/5.0" },
-            });
-            const contentType = (imgRes.headers["content-type"] as string) || "image/jpeg";
-            const mime = contentType.split(";")[0].trim();
-            if (mime.startsWith("image/")) {
-              nzbDb.setCustomThumbnail(logMsgId, Buffer.from(imgRes.data as ArrayBuffer), mime);
-              markDirty();
-              log.thumb(`Saved thumbnail for msg_id=${logMsgId} from ${thumbUrl}`);
-            }
+            nzbDb.setCustomThumbnail(logMsgId, thumbUrl);
+            markDirty();
+            log.thumb(`Saved thumbnail URL for msg_id=${logMsgId}: ${thumbUrl}`);
           } catch (thumbErr: any) {
-            log.error("THUMB", `Failed to save thumbnail for ${filename} — ${thumbErr.message}`);
+            log.error("THUMB", `Failed to save thumbnail URL for ${filename} — ${thumbErr.message}`);
           }
           _pendingThumbUrls.delete(filename);
         }
@@ -397,21 +387,11 @@ export async function startWebServer(bot: any): Promise<void> {
       // Save thumbnail if provided
       if (thumbUrl) {
         try {
-          const imgRes = await axios.get(thumbUrl, {
-            responseType: "arraybuffer",
-            timeout: 15000,
-            maxContentLength: 10 * 1024 * 1024,
-            headers: { "User-Agent": "Mozilla/5.0" },
-          });
-          const contentType = (imgRes.headers["content-type"] as string) || "image/jpeg";
-          const mime = contentType.split(";")[0].trim();
-          if (mime.startsWith("image/")) {
-            nzbDb.setCustomThumbnail(logMsgId, Buffer.from(imgRes.data as ArrayBuffer), mime);
-            markDirty();
-            log.thumb(`Saved thumbnail for msg_id=${logMsgId} from ${thumbUrl}`);
-          }
+          nzbDb.setCustomThumbnail(logMsgId, thumbUrl);
+          markDirty();
+          log.thumb(`Saved thumbnail URL for msg_id=${logMsgId}: ${thumbUrl}`);
         } catch (thumbErr: any) {
-          log.error("THUMB", `Failed to save thumbnail for ${filename} — ${thumbErr.message}`);
+          log.error("THUMB", `Failed to save thumbnail URL for ${filename} — ${thumbErr.message}`);
         }
         _pendingThumbUrls.delete(filename);
       }
@@ -637,8 +617,8 @@ export async function startWebServer(bot: any): Promise<void> {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
-  // ─── Sample image: store (POST) ─────────────────────────────────
-  app.post("/api/logs/:msg_id/sample", async (req, res) => {
+  // ─── Sample image: store URL (POST) ─────────────────────────────
+  app.post("/api/logs/:msg_id/sample", (req, res) => {
     const msgId = parseInt(req.params.msg_id, 10);
     if (isNaN(msgId)) return res.status(400).json({ error: "Invalid ID" });
 
@@ -649,40 +629,37 @@ export async function startWebServer(bot: any): Promise<void> {
     if (!record) return res.status(404).json({ error: "Log entry not found" });
 
     try {
-      const imgRes = await axios.get(url, {
-        responseType: "arraybuffer",
-        timeout: 15000,
-        maxContentLength: 10 * 1024 * 1024, // 10 MB max
-        headers: { "User-Agent": "Mozilla/5.0" },
-      });
-
-      const contentType = (imgRes.headers["content-type"] as string) || "image/jpeg";
-      const mime = contentType.split(";")[0].trim();
-
-      if (!mime.startsWith("image/")) return res.status(400).json({ error: "URL does not point to an image" });
-
-      const data = Buffer.from(imgRes.data as ArrayBuffer);
-      nzbDb.setCustomThumbnail(msgId, data, mime);
+      nzbDb.setCustomThumbnail(msgId, url);
       markDirty();
-      log.thumb(`Saved custom thumbnail for msg_id=${msgId} — ${record.file_name} (${(data.length / 1024).toFixed(1)} KB, ${mime})`);
-      res.json({ success: true, size: data.length, mime });
+      log.thumb(`Saved custom thumbnail URL for msg_id=${msgId} — ${record.file_name}`);
+      res.json({ success: true, url });
     } catch (e: any) {
-      log.error("THUMB", `Download failed for msg_id=${msgId} — ${e.message}`);
-      res.status(502).json({ error: `Failed to download image: ${e.message}` });
+      log.error("THUMB", `Failed to save thumbnail URL for msg_id=${msgId} — ${e.message}`);
+      res.status(500).json({ error: e.message });
     }
   });
 
-  // ─── Sample image: serve (GET) ───────────────────────────────────
-  app.get("/api/logs/:msg_id/sample", (req, res) => {
+  // ─── Sample image: proxy URL (GET) ─────────────────────────
+  app.get("/api/logs/:msg_id/sample", async (req, res) => {
     const msgId = parseInt(req.params.msg_id, 10);
     if (isNaN(msgId)) return res.status(400).json({ error: "Invalid ID" });
 
-    const thumb = nzbDb.getCustomThumbnail(msgId);
-    if (!thumb) return res.status(404).send("No custom thumbnail");
+    const thumbUrl = nzbDb.getCustomThumbnailUrl(msgId);
+    if (!thumbUrl) return res.status(404).send("No custom thumbnail");
 
-    res.set("Content-Type", thumb.mime);
-    res.set("Cache-Control", "public, max-age=31536000, immutable");
-    res.send(thumb.data);
+    try {
+      const imgRes = await axios.get(thumbUrl, {
+        responseType: "stream",
+        timeout: 15000,
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+      });
+      res.set("Content-Type", imgRes.headers["content-type"] || "image/jpeg");
+      res.set("Cache-Control", "public, max-age=31536000");
+      imgRes.data.pipe(res);
+    } catch (e: any) {
+      log.error("THUMB", `Proxy failed for ${thumbUrl}, falling back to redirect. ${e.message}`);
+      res.redirect(302, thumbUrl);
+    }
   });
 
   // ─── ThePornDB + StashDB thumbnail proxy (REST → GraphQL fallback) ──
