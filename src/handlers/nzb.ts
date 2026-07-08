@@ -106,18 +106,20 @@ function parseCaptionWithUrl(caption: string, fallbackName: string): { thumbnail
     const rest = trimmed.slice(spaceIdx + 1).trim();
     const thumbnailUrl = resolveThumbPrefix(prefix);
     if (thumbnailUrl) {
-      const displayName = rest.replace(/\.nzb$/i, "");
+      // Keep .nzb in display name — ensure it ends with .nzb
+      const displayName = rest.toLowerCase().endsWith(".nzb") ? rest : rest + ".nzb";
       return { thumbnailUrl, displayName };
     }
   }
 
-  // No recognised prefix — treat whole caption as display name
+  // No recognised prefix — treat whole caption as display name, ensure .nzb
   if (trimmed) {
-    return { thumbnailUrl: null, displayName: trimmed.replace(/\.nzb$/i, "") };
+    const displayName = trimmed.toLowerCase().endsWith(".nzb") ? trimmed : trimmed + ".nzb";
+    return { thumbnailUrl: null, displayName };
   }
 
-  // No caption — fall back to actual filename
-  return { thumbnailUrl: null, displayName: fallbackName.replace(/\.nzb$/i, "") };
+  // No caption — fall back to actual filename (already has .nzb)
+  return { thumbnailUrl: null, displayName: fallbackName };
 }
 
 export const handleNzbUpload = async (ctx: Context): Promise<boolean> => {
@@ -128,12 +130,9 @@ export const handleNzbUpload = async (ctx: Context): Promise<boolean> => {
   if (!LOG_GROUP_ID) return false;
 
   const rawCaption: string = (ctx.message as any).caption ?? "";
-  const { thumbnailUrl, displayName: parsedName } = parseCaptionWithUrl(rawCaption, fileName);
-
-  // displayName for DB/caption is the clean title WITHOUT .nzb extension
-  // file_name stored in DB keeps .nzb for grabs
-  const displayName = parsedName; // no .nzb — clean title
-  const fileNameWithExt = displayName.toLowerCase().endsWith(".nzb") ? displayName : displayName + ".nzb";
+  const { thumbnailUrl, displayName } = parseCaptionWithUrl(rawCaption, fileName);
+  // displayName already has .nzb — used for both caption and file_name in DB
+  const fileNameWithExt = displayName;
 
   try {
     const logMsg = await ctx.api.copyMessage(LOG_GROUP_ID, ctx.chat!.id, ctx.message!.message_id, {
@@ -277,8 +276,7 @@ export const aiRenameCommand = restricted(async (ctx: Ctx) => {
     const aiData = aiRes.data as { ok: boolean; result?: string; error?: string };
     if (!aiData?.ok || !aiData.result) throw new Error(aiData?.error ?? "AI rename failed");
 
-    let newName = aiData.result.trim();
-    if (!newName.toLowerCase().endsWith(".nzb")) newName += ".nzb";
+    let newName = aiData.result.trim().replace(/\.nzb$/i, "") + ".nzb";
 
     const keywords = extractKeywords(newName, newName);
     db.updateFile(msgId, newName, keywords);

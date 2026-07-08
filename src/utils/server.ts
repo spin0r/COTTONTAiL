@@ -329,14 +329,12 @@ export async function startWebServer(bot: any): Promise<void> {
         let logMsgId = 0;
         if (_bot && LOG_GROUP_ID) {
           try {
-            const displayCaption = filename.replace(/\.nzb$/i, "");
-            const logMsg = await _bot.api.sendDocument(LOG_GROUP_ID, new InputFile(fileContent, filename), { caption: `<code>${displayCaption}</code>`, parse_mode: "HTML" });
+            const logMsg = await _bot.api.sendDocument(LOG_GROUP_ID, new InputFile(fileContent, filename), { caption: `<code>${filename}</code>`, parse_mode: "HTML" });
             logMsgId = logMsg.message_id;
           } catch (e: any) { log.error("NZB", `Failed to send to log channel — ${e.message}`); }
         }
         try {
-          const displayCaption = filename.replace(/\.nzb$/i, "");
-          nzbDb.insertFile({ msg_id: logMsgId, file_name: filename, caption: displayCaption, keywords: extractKeywords(filename, displayCaption), file_type: "nzb" });
+          nzbDb.insertFile({ msg_id: logMsgId, file_name: filename, caption: filename, keywords: extractKeywords(filename, filename), file_type: "nzb" });
           markDirty();
           log.nzb(`Indexed: ${filename} (msg_id=${logMsgId}) via MagicNZB`);
           try { clearSearchCache(); } catch (_) {}
@@ -375,11 +373,10 @@ export async function startWebServer(bot: any): Promise<void> {
 
     try {
       const fileContent = fs.readFileSync(filepath);
-      const displayCaption = filename.replace(/\.nzb$/i, "");
-      const logMsg = await _bot.api.sendDocument(LOG_GROUP_ID, new InputFile(fileContent, filename), { caption: `<code>${displayCaption}</code>`, parse_mode: "HTML" });
+      const logMsg = await _bot.api.sendDocument(LOG_GROUP_ID, new InputFile(fileContent, filename), { caption: `<code>${filename}</code>`, parse_mode: "HTML" });
       const logMsgId = logMsg.message_id;
       try {
-        nzbDb.insertFile({ msg_id: logMsgId, file_name: filename, caption: displayCaption, keywords: extractKeywords(filename, displayCaption), file_type: "nzb" });
+        nzbDb.insertFile({ msg_id: logMsgId, file_name: filename, caption: filename, keywords: extractKeywords(filename, filename), file_type: "nzb" });
         markDirty();
         try { clearSearchCache(); } catch (_) {}
       } catch (dbErr: any) { log.error("NZB", `DB index error — ${dbErr.message}`); }
@@ -578,8 +575,7 @@ export async function startWebServer(bot: any): Promise<void> {
       const aiData = aiRes.data as { ok: boolean; result?: string; error?: string };
       if (!aiData?.ok || !aiData.result) return res.status(502).json({ error: aiData?.error ?? "AI rename failed" });
 
-      let newName = aiData.result.trim();
-      if (!newName.toLowerCase().endsWith(".nzb")) newName += ".nzb";
+      let newName = aiData.result.trim().replace(/\.nzb$/i, "") + ".nzb";
 
       nzbDb.updateFile(msgId, newName, extractKeywords(newName, newName));
       markDirty();

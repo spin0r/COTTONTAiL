@@ -205,6 +205,7 @@ export function updateFile(msgId: number, newFileName: string, newKeywords: stri
       WHERE msg_id = @msg_id
     `);
   }
+  // caption and file_name both keep .nzb — caption is the full display name shown in Logs
   return _updateFileStmt.run({ msg_id: msgId, file_name: newFileName, caption: newFileName, keywords: newKeywords });
 }
 

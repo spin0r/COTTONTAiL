@@ -138,7 +138,8 @@ function renderTable(logs: LogEntry[], total: number) {
               : ''}
           </div>
           <div class="filename-edit" style="display:none;align-items:center;gap:6px">
-            <input type="text" class="inline-rename" value="${l.caption || l.file_name}">
+            <input type="text" class="inline-rename" value="${(l.caption || l.file_name).replace(/\.nzb$/i, '')}">
+            <span class="inline-rename-ext" style="color:var(--fg-3);font-size:13px;white-space:nowrap;user-select:none">.nzb</span>
             <button class="btn-icon btn-rename-save" style="color:var(--success)">${iconCheck()}</button>
             <button class="btn-icon btn-rename-cancel">${iconX()}</button>
           </div>
@@ -485,9 +486,7 @@ function attachEvents() {
       editDiv.style.display = 'flex';
       const input = editDiv.querySelector('input')!;
       input.focus();
-      const dotIdx = input.value.lastIndexOf('.');
-      if (dotIdx > 0) input.setSelectionRange(0, dotIdx);
-      else input.select();
+      input.select();
       return;
     }
 
@@ -534,7 +533,9 @@ async function performAction(tr: HTMLElement, actionFn: () => Promise<void>) {
 
 async function saveRename(tr: HTMLElement, id: number) {
   const input = tr.querySelector('.inline-rename') as HTMLInputElement;
-  const newName = input.value.trim();
+  // Input only holds the name without .nzb; append it to form the full name
+  const baseName = input.value.trim().replace(/\.nzb$/i, '');
+  const newName = baseName ? baseName + '.nzb' : '';
   const nameSpan = tr.querySelector('.log-name-link') as HTMLElement;
   const oldName = nameSpan?.textContent?.trim() || '';
 
@@ -546,9 +547,9 @@ async function saveRename(tr: HTMLElement, id: number) {
   await performAction(tr, async () => {
     await api.renameLog(id, newName);
 
-    // Update name span in-place
+    // Update name span in-place with full name including .nzb
     if (nameSpan) nameSpan.textContent = newName;
-    input.value = newName;
+    input.value = newName.replace(/\.nzb$/i, '');
 
     // Collapse edit UI back to display
     (tr.querySelector('.filename-display') as HTMLElement).style.display = 'block';
