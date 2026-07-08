@@ -129,7 +129,7 @@ function renderTable(logs: LogEntry[], total: number) {
       <tr data-id="${l.msg_id}" data-has-custom="${l.has_custom_thumbnail ? '1' : '0'}">
         <td>
           <div class="cell-name filename-display">
-            <span class="log-name-link cell-name-link">${l.file_name}</span>
+            <span class="log-name-link cell-name-link">${l.caption || l.file_name}</span>
             ${l.has_custom_thumbnail
               ? `<span class="custom-thumb-dot" title="Has sample image"></span>`
               : ''}
@@ -138,7 +138,7 @@ function renderTable(logs: LogEntry[], total: number) {
               : ''}
           </div>
           <div class="filename-edit" style="display:none;align-items:center;gap:6px">
-            <input type="text" class="inline-rename" value="${l.file_name}">
+            <input type="text" class="inline-rename" value="${l.caption || l.file_name}">
             <button class="btn-icon btn-rename-save" style="color:var(--success)">${iconCheck()}</button>
             <button class="btn-icon btn-rename-cancel">${iconX()}</button>
           </div>
@@ -295,12 +295,12 @@ function showSetCustomModal(msgId: number, fileName: string) {
         <div>
           <label style="font-size:11px;color:var(--fg-3);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Image URL</label>
           <input id="sc-url" type="text" class="search-input" style="width:100%" placeholder="https://example.com/poster.jpg">
-          <div style="font-size:11px;color:var(--fg-3);margin-top:4px">Downloaded once and stored permanently in the database — survives redeploys.</div>
+          <div style="font-size:11px;color:var(--fg-3);margin-top:4px">Only the URL is stored in the database. The image is proxied on the fly.</div>
         </div>
         <div id="sc-status" style="font-size:12px;display:none"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button class="btn btn-ghost" id="sc-cancel">Cancel</button>
-          <button class="btn btn-primary" id="sc-save">Download &amp; Save</button>
+          <button class="btn btn-primary" id="sc-save">Save URL</button>
         </div>
       </div>
     </div>
@@ -364,7 +364,7 @@ function showSetCustomModal(msgId: number, fileName: string) {
       statusEl.style.color = 'var(--error)';
       statusEl.textContent = `✗ ${err.message}`;
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Download & Save';
+      saveBtn.textContent = 'Save URL';
     }
   }
 
