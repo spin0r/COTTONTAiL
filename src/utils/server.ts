@@ -685,32 +685,13 @@ export async function startWebServer(bot: any): Promise<void> {
     res.send(thumb.data);
   });
 
-  // ─── ThePornDB thumbnail proxy (REST API) ─────────────────────────
+  // ─── ThePornDB + StashDB thumbnail proxy (REST → GraphQL fallback) ──
   // In-memory cache: msg_id → { url, ts }
   const _thumbCache = new Map<number, { url: string | null; ts: number }>();
   const THUMB_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-  app.get("/api/logs/:msg_id/thumbnail", async (req, res) => {
-    const msgId = parseInt(req.params.msg_id, 10);
-    if (isNaN(msgId)) return res.status(400).json({ error: "Invalid ID" });
-
-    const apiToken = process.env.THEPORNDB_API_TOKEN;
-    if (!apiToken) return res.status(503).json({ error: "THEPORNDB_API_TOKEN not configured" });
-
-    // Serve from cache
-    const cached = _thumbCache.get(msgId);
-    if (cached && Date.now() - cached.ts < THUMB_CACHE_TTL) {
-      if (!cached.url) return res.status(404).send("No thumbnail");
-      return res.redirect(302, cached.url);
-    }
-
-    const record = nzbDb.getByMsgId(msgId);
-    if (!record) return res.status(404).json({ error: "Record not found" });
-
-    // Use the raw filename for the parse endpoint — it extracts studio codes automatically
-    const raw = (record.file_name || record.caption || "").replace(/\.nzb$/i, "");
-    if (!raw) return res.status(404).send("No filename");
-
+  // Helper: try ThePornDB REST API
+  async function _tryThePornDB(raw: string, apiToken: string): Promise<string | null> {
     try {
       const apiRes = await axios.get(
         "https://api.theporndb.net/scenes",
@@ -726,29 +707,127 @@ export async function startWebServer(bot: any): Promise<void> {
 
       const scenes: any[] = apiRes.data?.data ?? [];
       const scene = scenes[0];
+      if (!scene) return null;
 
-      // Pick the best available image: background > image > poster
-      let posterUrl: string | null = null;
-      if (scene) {
-        posterUrl =
-          scene.background?.large ??
-          scene.background?.full ??
-          scene.image ??
-          scene.poster ??
-          scene.posters?.large ??
-          scene.posters?.full ??
-          null;
-      }
-
-      _thumbCache.set(msgId, { url: posterUrl, ts: Date.now() });
-
-      if (!posterUrl) return res.status(404).send("No thumbnail");
-      res.redirect(302, posterUrl);
+      return (
+        scene.background?.large ??
+        scene.background?.full ??
+        scene.image ??
+        scene.poster ??
+        scene.posters?.large ??
+        scene.posters?.full ??
+        null
+      );
     } catch (e: any) {
-      log.error("THUMB", `ThePornDB lookup failed for msg_id=${msgId} — ${e.message}`);
-      _thumbCache.set(msgId, { url: null, ts: Date.now() });
-      res.status(404).send("No thumbnail");
+      log.error("THUMB", `ThePornDB lookup failed — ${e.message}`);
+      return null;
     }
+  }
+
+  // Helper: clean a scene-release filename for StashDB search
+  // "Newsensations.26.05.26.Ellie.Nova.A.Hotwife..." → "Newsensations Ellie Nova A Hotwife..."
+  function _cleanForStashSearch(raw: string): string {
+    return raw
+      .replace(/[._]/g, " ")                              // dots & underscores → spaces
+      .replace(/\b\d{2,4}[\s.-]\d{2}[\s.-]\d{2}\b/g, "")  // strip date patterns (YY MM DD / YYYY MM DD)
+      .replace(/\b\d{6,}-\d{3}\b/g, "")                   // strip numeric codes like 112323-001
+      .replace(/\b(19|20)\d{2}\b/g, "")                    // strip standalone years (2024, 2025, 2026…)
+      .replace(/\b\d{3,4}p\b/gi, "")                      // strip resolution tags (1080p, 720p, etc)
+      .replace(/\b(x26[45]|hevc|h\.?26[45])\b/gi, "")     // strip codec tags
+      .replace(/\b4k\b/gi, "")                             // strip 4k
+      .replace(/\s{2,}/g, " ")                             // collapse multiple spaces
+      .trim();
+  }
+
+  // Helper: try StashDB GraphQL API
+  async function _tryStashDB(raw: string, apiKey: string): Promise<string | null> {
+    const cleaned = _cleanForStashSearch(raw);
+    if (!cleaned) return null;
+
+    const query = `
+      query SearchScenes($term: String!) {
+        searchScenes(term: $term, limit: 1) {
+          count
+          scenes {
+            id
+            title
+            images {
+              id
+              url
+            }
+          }
+        }
+      }
+    `;
+    try {
+      const gqlRes = await axios.post(
+        "https://stashdb.org/graphql",
+        {
+          query,
+          variables: { term: cleaned },
+        },
+        {
+          headers: {
+            "ApiKey": apiKey,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          timeout: 10000,
+        }
+      );
+
+      const scenes: any[] = gqlRes.data?.data?.searchScenes?.scenes ?? [];
+      const scene = scenes[0];
+      if (!scene) return null;
+
+      // Pick the first image URL from the scene
+      const images: any[] = scene.images ?? [];
+      return images[0]?.url ?? null;
+    } catch (e: any) {
+      log.error("THUMB", `StashDB lookup failed — ${e.message}`);
+      return null;
+    }
+  }
+
+  app.get("/api/logs/:msg_id/thumbnail", async (req, res) => {
+    const msgId = parseInt(req.params.msg_id, 10);
+    if (isNaN(msgId)) return res.status(400).json({ error: "Invalid ID" });
+
+    const porndbToken = process.env.THEPORNDB_API_TOKEN;
+    const stashdbKey = process.env.STASHDB_API_KEY;
+    if (!porndbToken && !stashdbKey) return res.status(503).json({ error: "No thumbnail API tokens configured" });
+
+    // Serve from cache
+    const cached = _thumbCache.get(msgId);
+    if (cached && Date.now() - cached.ts < THUMB_CACHE_TTL) {
+      if (!cached.url) return res.status(404).send("No thumbnail");
+      return res.redirect(302, cached.url);
+    }
+
+    const record = nzbDb.getByMsgId(msgId);
+    if (!record) return res.status(404).json({ error: "Record not found" });
+
+    // Use the raw filename for the parse / search endpoint
+    const raw = (record.file_name || record.caption || "").replace(/\.nzb$/i, "");
+    if (!raw) return res.status(404).send("No filename");
+
+    let posterUrl: string | null = null;
+
+    // 1️⃣ Try ThePornDB first
+    if (porndbToken) {
+      posterUrl = await _tryThePornDB(raw, porndbToken);
+    }
+
+    // 2️⃣ Fallback to StashDB if ThePornDB had nothing
+    if (!posterUrl && stashdbKey) {
+      posterUrl = await _tryStashDB(raw, stashdbKey);
+      if (posterUrl) log.thumb(`StashDB fallback matched for msg_id=${msgId}`);
+    }
+
+    _thumbCache.set(msgId, { url: posterUrl, ts: Date.now() });
+
+    if (!posterUrl) return res.status(404).send("No thumbnail");
+    res.redirect(302, posterUrl);
   });
 
   app.listen(UPLOAD_PORT, "0.0.0.0", () => {
