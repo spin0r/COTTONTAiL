@@ -46,6 +46,30 @@ export async function renderLogs(container: HTMLElement) {
       <div id="logs-empty" style="display:none"></div>
     `;
     attachEvents();
+
+    // Listen for thumbnail saves from the Chrome extension
+    if (!(window as any)._dsExtListener) {
+      (window as any)._dsExtListener = true;
+      window.addEventListener('message', (e) => {
+        if (e.data?.type === 'DS_THUMB_SAVED' && e.data?.msgId) {
+          const row = container.querySelector(`tr[data-id="${e.data.msgId}"]`);
+          if (row) {
+            row.setAttribute('data-has-custom', '1');
+            if (!row.querySelector('.custom-thumb-dot')) {
+              const nameDiv = row.querySelector('.filename-display');
+              if (nameDiv) {
+                const dot = document.createElement('span');
+                dot.className = 'custom-thumb-dot';
+                dot.title = 'Has sample image';
+                nameDiv.appendChild(dot);
+              }
+            }
+            const backfillBtn = row.querySelector('.btn-backfill') as HTMLElement | null;
+            if (backfillBtn) backfillBtn.style.color = 'var(--success)';
+          }
+        }
+      });
+    }
   }
 
   loadStats();
@@ -142,7 +166,7 @@ function showThumbModal(msgId: number, fileName: string, telegramLink: string, h
   // slides: [ { label, url, type } ]
   const slides = [
     { label: 'ThePornDB', url: api.logThumbnailUrl(msgId), preload: true },
-    ...(hasCustom ? [{ label: 'Sample', url: api.logCustomThumbnailUrl(msgId), preload: false }] : []),
+    ...(hasCustom ? [{ label: 'Sample', url: api.logCustomThumbnailUrl(msgId) + '?t=' + Date.now(), preload: false }] : []),
   ];
   let current = 0;
 
