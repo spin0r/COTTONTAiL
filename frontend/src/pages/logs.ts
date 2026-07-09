@@ -419,7 +419,8 @@ function attachEvents() {
     }
 
     if (target.closest('.btn-grab')) {
-      await performAction(tr, async () => {
+      const btn = target.closest('.btn-grab') as HTMLButtonElement;
+      await performBtnAction(btn, 'btn-grab-sending', async () => {
         await api.grabNzb(id);
         (window as any).showToast('Sent to MagicNZB successfully', 'success');
       });
@@ -442,7 +443,8 @@ function attachEvents() {
 
     if (target.closest('.btn-delete')) {
       if (confirm('Delete this entry from database and Telegram?')) {
-        await performAction(tr, async () => {
+        const btn = target.closest('.btn-delete') as HTMLButtonElement;
+        await performBtnAction(btn, 'btn-delete-working', async () => {
           const link = tr.querySelector('.log-tg-link')?.getAttribute('href') || '';
           const res = await api.deleteLog(id);
           if (!res.telegram_deleted) {
@@ -520,7 +522,8 @@ function attachEvents() {
     }
 
     if (target.closest('.btn-rename-save')) {
-      await saveRename(tr, id);
+      const btn = target.closest('.btn-rename-save') as HTMLButtonElement;
+      await saveRename(tr, id, btn);
       return;
     }
   });
@@ -531,12 +534,26 @@ function attachEvents() {
       const tr = target.closest('tr');
       if (!tr) return;
       if (e.key === 'Enter') {
-        await saveRename(tr, parseInt(tr.getAttribute('data-id')!, 10));
+        const saveBtn = tr.querySelector('.btn-rename-save') as HTMLButtonElement;
+        await saveRename(tr, parseInt(tr.getAttribute('data-id')!, 10), saveBtn);
       } else if (e.key === 'Escape') {
         tr.querySelector('.btn-rename-cancel')!.dispatchEvent(new Event('click', { bubbles: true }));
       }
     }
   });
+}
+
+async function performBtnAction(btn: HTMLButtonElement, activeClass: string, actionFn: () => Promise<void>) {
+  btn.disabled = true;
+  btn.classList.add(activeClass);
+  try {
+    await actionFn();
+  } catch (err: any) {
+    (window as any).showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove(activeClass);
+  }
 }
 
 async function performAiAction(btn: HTMLButtonElement, actionFn: () => Promise<void>) {
@@ -566,7 +583,7 @@ async function performAction(tr: HTMLElement, actionFn: () => Promise<void>) {
   }
 }
 
-async function saveRename(tr: HTMLElement, id: number) {
+async function saveRename(tr: HTMLElement, id: number, saveBtn?: HTMLButtonElement) {
   const input = tr.querySelector('.inline-rename') as HTMLInputElement;
   // Input only holds the name without .nzb; append it to form the full name
   const baseName = input.value.trim().replace(/\.nzb$/i, '');
@@ -579,7 +596,7 @@ async function saveRename(tr: HTMLElement, id: number) {
     return;
   }
 
-  await performAction(tr, async () => {
+  const actionFn = async () => {
     await api.renameLog(id, newName);
 
     // Update name span in-place with full name including .nzb
@@ -591,5 +608,11 @@ async function saveRename(tr: HTMLElement, id: number) {
     (tr.querySelector('.filename-edit') as HTMLElement).style.display = 'none';
 
     (window as any).showToast(`Renamed to: ${newName}`, 'success');
-  });
+  };
+
+  if (saveBtn) {
+    await performBtnAction(saveBtn, 'btn-rename-saving', actionFn);
+  } else {
+    await performAction(tr, actionFn);
+  }
 }
