@@ -453,11 +453,12 @@ async function handleFiles(files: File[]) {
       const existingRow = mainContainer?.querySelector(`tr[data-name="${CSS.escape(file.name)}"]`);
       const thumbInput = existingRow?.querySelector('.file-thumb-input') as HTMLInputElement | null;
       if (thumbInput && !thumbInput.value) thumbInput.value = resolvedThumbUrl;
-      pendingThumbs.set(file.name, resolvedThumbUrl);
+      // Key by nzbName (clean name without prefix) so it survives re-render after upload
+      pendingThumbs.set(nzbName, resolvedThumbUrl);
     }
 
     // Also honour any thumb URL already stored in the pending map (set via per-row input)
-    const thumbUrl = resolvedThumbUrl || pendingThumbs.get(file.name) || '';
+    const thumbUrl = resolvedThumbUrl || pendingThumbs.get(nzbName) || pendingThumbs.get(file.name) || '';
 
     const ui = document.createElement('div');
     ui.className = 'upload-progress';
