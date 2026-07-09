@@ -119,9 +119,6 @@ function renderTable() {
           <button class="btn-icon btn-log" title="Send to Telegram Log">${iconClipboard()}</button>
           <button class="btn-icon btn-delete" title="Delete">${iconTrash()}</button>
         </div>
-        <div class="action-loading" style="display:none;justify-content:flex-end;padding-right:12px">
-          <div class="spinner spinner-sm"></div>
-        </div>
       </td>
     </tr>
   `}).join('');
@@ -241,7 +238,8 @@ function attachEvents() {
 
     // Upload Magic
     if (target.closest('.btn-magic')) {
-      await performRowAction(tr, name, 'magic');
+      const btn = target.closest('.btn-magic') as HTMLButtonElement;
+      await performRowAction(tr, name, 'magic', undefined, btn);
       return;
     }
 
@@ -308,12 +306,17 @@ async function saveRename(tr: HTMLElement, oldName: string) {
   }
 }
 
-async function performRowAction(tr: HTMLElement, name: string, type: 'magic' | 'log', imageUrl?: string) {
+async function performRowAction(tr: HTMLElement, name: string, type: 'magic' | 'log', imageUrl?: string, btn?: HTMLButtonElement) {
+  // If button passed, animate it; otherwise disable all buttons in the row
   const actionsEl = tr.querySelector('.action-buttons') as HTMLElement;
-  const loadingEl = tr.querySelector('.action-loading') as HTMLElement;
+  const allBtns = actionsEl.querySelectorAll<HTMLButtonElement>('button');
 
-  actionsEl.style.display = 'none';
-  loadingEl.style.display = 'flex';
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('btn-magic-sending');
+  } else {
+    allBtns.forEach(b => { b.disabled = true; b.style.opacity = '0.4'; });
+  }
 
   // If no imageUrl passed in, read from the per-row input
   const thumbInput = tr.querySelector('.file-thumb-input') as HTMLInputElement | null;
@@ -347,8 +350,12 @@ async function performRowAction(tr: HTMLElement, name: string, type: 'magic' | '
     loadData();
   } catch (err: any) {
     (window as any).showToast(err.message, 'error');
-    actionsEl.style.display = 'flex';
-    loadingEl.style.display = 'none';
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('btn-magic-sending');
+    } else {
+      allBtns.forEach(b => { b.disabled = false; b.style.opacity = ''; });
+    }
   }
 }
 

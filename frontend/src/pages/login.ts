@@ -76,7 +76,7 @@ export function renderLogin(container: HTMLElement) {
           showChangePassword = true;
           render();
         } else {
-          location.reload();
+          location.replace('/' + location.hash);
         }
       } catch (err: any) {
         errEl.textContent = err.message || 'Login failed';
@@ -103,7 +103,7 @@ export function renderLogin(container: HTMLElement) {
 
       try {
         await api.changePassword(current, newPw);
-        location.reload();
+        location.replace('/' + location.hash);
       } catch (err: any) {
         errEl.textContent = err.message || 'Change failed';
         btn.disabled = false;

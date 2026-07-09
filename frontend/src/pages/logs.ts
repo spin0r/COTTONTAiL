@@ -153,9 +153,6 @@ function renderTable(logs: LogEntry[], total: number) {
             <button class="btn-icon btn-backfill" title="Set Sample Image" style="${l.has_custom_thumbnail ? 'color:var(--success)' : ''}">${iconImage()}</button>
             <button class="btn-icon btn-delete" title="Delete">${iconTrash()}</button>
           </div>
-          <div class="action-loading" style="display:none;justify-content:flex-end;padding-right:12px">
-            <div class="spinner spinner-sm"></div>
-          </div>
         </td>
       </tr>
     `;
@@ -430,7 +427,8 @@ function attachEvents() {
     }
 
     if (target.closest('.btn-ai-rename')) {
-      await performAction(tr, async () => {
+      const btn = target.closest('.btn-ai-rename') as HTMLButtonElement;
+      await performAiAction(btn, async () => {
         const res = await api.aiRenameLog(id);
         // Update name in-place without reloading the full list
         const nameSpan = tr.querySelector('.log-name-link') as HTMLElement;
@@ -541,18 +539,30 @@ function attachEvents() {
   });
 }
 
-async function performAction(tr: HTMLElement, actionFn: () => Promise<void>) {
-  const actionsEl = tr.querySelector('.action-buttons') as HTMLElement;
-  const loadingEl = tr.querySelector('.action-loading') as HTMLElement;
-  actionsEl.style.display = 'none';
-  loadingEl.style.display = 'flex';
+async function performAiAction(btn: HTMLButtonElement, actionFn: () => Promise<void>) {
+  btn.disabled = true;
+  btn.classList.add('btn-ai-thinking');
   try {
     await actionFn();
   } catch (err: any) {
     (window as any).showToast(err.message, 'error');
   } finally {
-    actionsEl.style.display = 'flex';
-    loadingEl.style.display = 'none';
+    btn.disabled = false;
+    btn.classList.remove('btn-ai-thinking');
+  }
+}
+
+async function performAction(tr: HTMLElement, actionFn: () => Promise<void>) {
+  const actionsEl = tr.querySelector('.action-buttons') as HTMLElement;
+  // Disable all buttons during the action to prevent double-clicks; no layout shift
+  const btns = actionsEl.querySelectorAll<HTMLButtonElement>('button');
+  btns.forEach(b => { b.disabled = true; b.style.opacity = '0.4'; });
+  try {
+    await actionFn();
+  } catch (err: any) {
+    (window as any).showToast(err.message, 'error');
+  } finally {
+    btns.forEach(b => { b.disabled = false; b.style.opacity = ''; });
   }
 }
 
