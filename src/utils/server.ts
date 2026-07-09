@@ -555,6 +555,7 @@ export async function startWebServer(bot: any): Promise<void> {
       const result = nzbDb.updateFile(msgId, newName, newKeywords);
       markDirty();
       try { clearSearchCache(); } catch (_) {}
+      _thumbCache.delete(msgId); // bust thumbnail cache so new caption is used
 
       res.json({ success: true, new_name: newName, telegram_updated: telegramOk, db_updated: result.changes > 0 });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -581,6 +582,7 @@ export async function startWebServer(bot: any): Promise<void> {
       nzbDb.updateFile(msgId, newName, extractKeywords(newName, newName));
       markDirty();
       try { clearSearchCache(); } catch (_) {}
+      _thumbCache.delete(msgId); // bust thumbnail cache so new caption is used
 
       let telegramOk = false;
       if (_bot && LOG_GROUP_ID && msgId > 0) {
@@ -795,8 +797,8 @@ export async function startWebServer(bot: any): Promise<void> {
     const record = nzbDb.getByMsgId(msgId);
     if (!record) return res.status(404).json({ error: "Record not found" });
 
-    // Use the raw filename for the parse / search endpoint
-    const raw = (record.file_name || record.caption || "").replace(/\.nzb$/i, "");
+    // Always use caption for the parse / search endpoint
+    const raw = (record.caption || "").replace(/\.nzb$/i, "");
     if (!raw) return res.status(404).send("No filename");
 
     let posterUrl: string | null = null;
