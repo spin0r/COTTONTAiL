@@ -7,7 +7,7 @@ import { extractKeywords, normalizeQuery } from "../nzb/utils";
 import { markDirty } from "../nzb/backup";
 import type { BotSession, NzbRecord } from "../types";
 
-const AI_RENAME_URL = "https://v2-vl42.onrender.com/api/ai-rename";
+const AI_RENAME_URL = "https://fmt.helvetican.xyz/api/ai-rename";
 
 type Ctx = Context & { session: BotSession };
 

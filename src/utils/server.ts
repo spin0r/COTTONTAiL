@@ -573,7 +573,7 @@ export async function startWebServer(bot: any): Promise<void> {
       if (!currentName) return res.status(400).json({ error: "No filename found for this entry" });
 
       const inputName = currentName.replace(/\.nzb$/i, "");
-      const aiRes = await axios.post("https://v2-vl42.onrender.com/api/ai-rename", { text: inputName }, { headers: { "Content-Type": "application/json" }, timeout: 30000 });
+      const aiRes = await axios.post("https://fmt.helvetican.xyz/api/ai-rename", { text: inputName }, { headers: { "Content-Type": "application/json" }, timeout: 30000 });
       const aiData = aiRes.data as { ok: boolean; result?: string; error?: string };
       if (!aiData?.ok || !aiData.result) return res.status(502).json({ error: aiData?.error ?? "AI rename failed" });
 
