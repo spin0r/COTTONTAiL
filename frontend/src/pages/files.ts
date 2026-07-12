@@ -439,6 +439,10 @@ async function handleFiles(files: File[]) {
   const queueEl = mainContainer?.querySelector('#upload-queue');
   if (!queueEl) return;
 
+  const isBatch = nzbFiles.length > 1;
+  let successCount = 0;
+  const failedNames: string[] = [];
+
   for (const file of nzbFiles) {
     const id = 'up-' + Math.random().toString(36).substr(2, 9);
 
@@ -484,17 +488,40 @@ async function handleFiles(files: File[]) {
         if (pctTxt) pctTxt.textContent = `${pct}%`;
       }, thumbUrl || undefined);
       ui.remove();
+      successCount++;
     } catch (err: any) {
       (ui.querySelector('.upload-progress-fill') as HTMLElement)!.style.background = 'var(--error)';
       ui.querySelector('.pct')!.textContent = 'Error';
       (ui.querySelector('.pct') as HTMLElement)!.style.color = 'var(--error)';
-      (window as any).showToast(`Failed to upload ${resolvedDisplayName}: ${err.message}`, 'error');
+      failedNames.push(resolvedDisplayName);
+      // Only show per-file error toast when uploading a single file
+      if (!isBatch) {
+        (window as any).showToast(`Failed: ${err.message}`, 'error');
+      }
       setTimeout(() => ui.remove(), 4000);
     }
 
     uploadsInProgress--;
-    if (uploadsInProgress === 0) {
-      loadData();
+  }
+
+  // Show a single summary toast after all files are done
+  if (isBatch) {
+    if (failedNames.length === 0) {
+      (window as any).showToast(`Uploaded ${successCount} file${successCount !== 1 ? 's' : ''}`, 'success');
+    } else if (successCount === 0) {
+      (window as any).showToast(`All ${failedNames.length} uploads failed`, 'error');
+    } else {
+      (window as any).showToast(
+        `${successCount} uploaded, ${failedNames.length} failed`,
+        'error'
+      );
     }
+  } else if (successCount === 1) {
+    // Single file success
+    (window as any).showToast(`Uploaded successfully`, 'success');
+  }
+
+  if (uploadsInProgress === 0) {
+    loadData();
   }
 }

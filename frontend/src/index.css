@@ -717,6 +717,9 @@ select.input {
   max-width: 440px;
   box-shadow: var(--shadow-lg);
   animation: modal-in 120ms ease;
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .modal-wide { max-width: 680px; }
 @keyframes modal-in {
@@ -742,7 +745,14 @@ select.input {
   cursor: pointer;
 }
 .modal-close:hover { color: var(--fg); background: var(--surface-2); }
-.modal-body { color: var(--fg-2); font-size: 13px; line-height: 1.6; }
+.modal-body {
+  color: var(--fg-2);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 
 /* ─── Drop zone ──────────────────────────────────────────────────── */
@@ -884,6 +894,8 @@ select.input {
   box-shadow: var(--shadow);
   animation: toast-in 0.15s ease;
   max-width: 360px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
   pointer-events: auto;
 }
 .toast.success { border-color: var(--success-dim); color: var(--success); }
