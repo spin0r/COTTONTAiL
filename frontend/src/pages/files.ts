@@ -328,24 +328,26 @@ async function performRowAction(tr: HTMLElement, name: string, type: 'magic' | '
     if (type === 'magic') {
       const res = await api.uploadToMagic(name);
       msgId = (res as any)?.msg_id ?? 0;
-      (window as any).showToast(`Uploaded ${name} to MagicNZB`, 'success');
     } else {
       const res = await api.uploadToLog(name);
       msgId = (res as any)?.msg_id ?? 0;
-      (window as any).showToast(`Sent ${name} to Telegram Log`, 'success');
     }
 
     // Save thumbnail for both actions if URL provided and msg_id valid
     if (thumbUrl && msgId > 0) {
       try {
         await api.setCustomThumbnail(msgId, thumbUrl);
-        (window as any).showToast('Thumbnail saved', 'success');
         pendingThumbs.delete(name);
         if (thumbInput) thumbInput.value = '';
       } catch (thumbErr: any) {
-        (window as any).showToast(`Thumbnail failed: ${thumbErr.message}`, 'error');
+        const action = type === 'magic' ? 'Uploaded to MagicNZB' : 'Sent to Log';
+        (window as any).showToast(`${action} — thumbnail failed: ${thumbErr.message}`, 'error');
       }
     }
+
+    // Single combined toast
+    const actionLabel = type === 'magic' ? 'Uploaded to MagicNZB' : 'Sent to Log';
+    (window as any).showToast(actionLabel, 'success');
 
     loadData();
   } catch (err: any) {
