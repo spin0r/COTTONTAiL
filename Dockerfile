@@ -1,6 +1,9 @@
-FROM node:20-slim
+FROM node:22-slim
 
 WORKDIR /app
+
+# Install build dependencies for native modules (e.g. better-sqlite3 / node-gyp)
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt-lists/*
 
 # Install root deps
 COPY package*.json ./
