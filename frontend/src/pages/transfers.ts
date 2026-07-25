@@ -1,6 +1,6 @@
 import { api } from '../api.ts';
 import type { Transfer, TransfersData } from '../api.ts';
-import { iconRefresh, iconTrash, iconEye, iconX, iconFolder, iconFile, iconActivity, iconFileType, iconSearch } from '../icons.ts';
+import { iconRefresh, iconTrash, iconEye, iconX, iconFolder, iconFile, iconActivity, iconFileType, iconSearch, iconPlay } from '../icons.ts';
 import { fmtSize } from '../api.ts';
 
 let interval: ReturnType<typeof setInterval> | undefined;
@@ -330,7 +330,10 @@ async function showContentsModal(id: string) {
             : `<span>${f.name}</span>`;
 
       const actionHtml = vid && f.link
-        ? `<button class="btn btn-ghost copy-link-btn" data-link="${f.link}" style="font-size:11px;padding:2px 8px;white-space:nowrap">Copy Link</button>`
+        ? `<div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+            <button class="btn btn-ghost play-video-btn" data-link="${f.link}" data-name="${f.name}" style="font-size:11px;padding:2px 8px;white-space:nowrap;display:flex;align-items:center;gap:4px;color:#3b82f6">${iconPlay()} Play</button>
+            <button class="btn btn-ghost copy-link-btn" data-link="${f.link}" style="font-size:11px;padding:2px 8px;white-space:nowrap">Copy Link</button>
+          </div>`
         : '';
 
       return `<div class="file-row" style="gap:10px">
@@ -357,6 +360,15 @@ async function showContentsModal(id: string) {
         navigator.clipboard.writeText(link).then(() => {
           (window as any).showToast('Link copied to clipboard', 'success');
         });
+      });
+    });
+
+    // Play video buttons
+    contentEl.querySelectorAll('.play-video-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const link = (btn as HTMLElement).getAttribute('data-link') || '';
+        const name = (btn as HTMLElement).getAttribute('data-name') || 'Video';
+        if (link) openVideoPlayer(link, name);
       });
     });
 
@@ -394,5 +406,141 @@ async function showContentsModal(id: string) {
   } catch (err: any) {
     const contentEl = modal.querySelector('#modal-content');
     if (contentEl) contentEl.innerHTML = `<div style="color:var(--error);padding:20px 0">Failed to load contents: ${err.message}</div>`;
+  }
+}
+
+// ─── DPlayer Video Player ─────────────────────────────────────────
+
+let dplayerLoaded = false;
+
+function loadDPlayer(): Promise<void> {
+  if (dplayerLoaded) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    // Load CSS
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://cdn.jsdelivr.net/npm/dplayer-enhanced@beta/dist/DPlayer.min.css';
+    document.head.appendChild(link);
+
+    // Load JS
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/dplayer-enhanced@beta/dist/DPlayer.min.js';
+    script.onload = () => { dplayerLoaded = true; resolve(); };
+    script.onerror = () => reject(new Error('Failed to load DPlayer'));
+    document.head.appendChild(script);
+  });
+}
+
+async function openVideoPlayer(url: string, name: string) {
+  // Inject web-fullscreen CSS overrides (once)
+  if (!document.getElementById('dplayer-wf-styles')) {
+    const style = document.createElement('style');
+    style.id = 'dplayer-wf-styles';
+    style.textContent = `
+      /* When DPlayer enters web-fullscreen ("W" key), remove container constraints */
+      .video-player-overlay:has(.dplayer-fulled) {
+        background: #000 !important;
+      }
+      .video-player-overlay:has(.dplayer-fulled) #dplayer-container {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+        aspect-ratio: unset !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+      }
+      /* Hide the title bar in web-fullscreen */
+      .video-player-overlay:has(.dplayer-fulled) > div:first-child {
+        display: none !important;
+      }
+      /* Ensure DPlayer fulled fills its container rather than using position:fixed */
+      #dplayer-container .dplayer.dplayer-fulled {
+        position: absolute !important;
+        z-index: 1 !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'video-player-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.95);display:flex;flex-direction:column;align-items:center;justify-content:center';
+
+  overlay.innerHTML = `
+    <div style="position:absolute;top:12px;right:16px;left:16px;display:flex;align-items:center;justify-content:space-between;z-index:10">
+      <div style="color:#ccc;font-size:13px;font-family:'Inter',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:calc(100% - 50px)" title="${name}">${name}</div>
+      <button id="close-player" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:50%;width:34px;height:34px;cursor:pointer;color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;backdrop-filter:blur(8px);transition:background .2s" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">✕</button>
+    </div>
+    <div id="dplayer-container" style="width:90vw;max-width:1200px;aspect-ratio:16/9;max-height:80vh;border-radius:8px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5)">
+      <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#888;font-size:14px;font-family:'Inter',sans-serif"><div class="spinner"></div>&nbsp;&nbsp;Loading player…</div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  let dpInstance: any = null;
+
+  const cleanup = () => {
+    if (dpInstance) {
+      try { dpInstance.destroy(); } catch (_) {}
+      dpInstance = null;
+    }
+    overlay.remove();
+    document.removeEventListener('keydown', escHandler, true);
+  };
+
+  const escHandler = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      // If DPlayer is in web-fullscreen, exit that first instead of closing
+      const fulled = overlay.querySelector('.dplayer-fulled');
+      if (fulled && dpInstance) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        dpInstance.fullScreen?.cancel('web');
+        return;
+      }
+      e.stopImmediatePropagation();
+      cleanup();
+    }
+  };
+
+  document.addEventListener('keydown', escHandler, true);
+  overlay.querySelector('#close-player')?.addEventListener('click', cleanup);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) cleanup();
+  });
+
+  try {
+    await loadDPlayer();
+
+    const DPlayer = (window as any).DPlayer;
+    if (!DPlayer) throw new Error('DPlayer not available');
+
+    const container = overlay.querySelector('#dplayer-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    dpInstance = new DPlayer({
+      container: container as HTMLElement,
+      video: {
+        url: url,
+        type: 'auto',
+      },
+      autoplay: true,
+      theme: '#3b82f6',
+      loop: false,
+      screenshot: true,
+      hotkey: true,
+      preload: 'auto',
+      volume: 0.8,
+    });
+  } catch (err: any) {
+    const container = overlay.querySelector('#dplayer-container');
+    if (container) {
+      container.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ef4444;font-size:14px;font-family:'Inter',sans-serif">Failed to load player: ${err.message}</div>`;
+    }
+    (window as any).showToast('Failed to load video player', 'error');
   }
 }

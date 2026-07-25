@@ -26,6 +26,7 @@ export const iconActivity  = () => s('<polyline points="22 12 18 12 15 21 9 3 6 
 export const iconImage     = () => s('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>');
 export const iconBackfill  = () => s('<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/>');
 export const iconTelegram  = () => s('<path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/>');
+export const iconPlay      = () => s('<polygon points="5 3 19 12 5 21 5 3"/>');
 
 // ─── File type badge icon ─────────────────────────────────────────
 export function iconFileType(filename: string): string {
