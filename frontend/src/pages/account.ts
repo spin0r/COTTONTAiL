@@ -24,7 +24,10 @@ export async function renderAccount(container: HTMLElement) {
     <div id="account-loading" class="loading-page"><div class="spinner"></div></div>
   `;
 
-  attachEvents();
+  if (!container.dataset.eventsAttached) {
+    attachEvents();
+    container.dataset.eventsAttached = '1';
+  }
   await loadData();
 }
 
