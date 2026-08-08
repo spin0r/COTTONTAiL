@@ -1,6 +1,6 @@
 import { api } from '../api.ts';
 import type { Transfer, TransfersData } from '../api.ts';
-import { iconRefresh, iconTrash, iconEye, iconX, iconFolder, iconFile, iconActivity, iconFileType, iconSearch, iconPlay } from '../icons.ts';
+import { iconRefresh, iconTrash, iconEye, iconX, iconFolder, iconFile, iconActivity, iconFileType, iconSearch, iconPlay, iconClipboard } from '../icons.ts';
 import { fmtSize } from '../api.ts';
 
 let interval: ReturnType<typeof setInterval> | undefined;
@@ -278,6 +278,9 @@ function attachEvents() {
 }
 
 async function showContentsModal(id: string) {
+  // Pre-load DPlayer fresh from jsDelivr whenever a new folder is opened
+  currentFolderPlayerPromise = loadDPlayer();
+
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.innerHTML = `
@@ -330,11 +333,15 @@ async function showContentsModal(id: string) {
             : `<span>${f.name}</span>`;
 
       const actionHtml = vid && f.link
-        ? `<div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
-            <button class="btn btn-ghost play-video-btn" data-link="${f.link}" data-name="${f.name}" style="font-size:11px;padding:2px 8px;white-space:nowrap;display:flex;align-items:center;gap:4px;color:#3b82f6">${iconPlay()} Play</button>
-            <button class="btn btn-ghost copy-link-btn" data-link="${f.link}" style="font-size:11px;padding:2px 8px;white-space:nowrap">Copy Link</button>
+        ? `<div style="display:flex;gap:4px;align-items:center;flex-shrink:0">
+            <button class="btn btn-ghost play-video-btn" data-link="${f.link}" data-name="${f.name}" title="Play Video" style="padding:4px;display:flex;align-items:center;justify-content:center;color:#3b82f6">${iconPlay()}</button>
+            <button class="btn btn-ghost copy-link-btn" data-link="${f.link}" title="Copy Link" style="padding:4px;display:flex;align-items:center;justify-content:center">${iconClipboard()}</button>
           </div>`
-        : '';
+        : f.link
+          ? `<div style="display:flex;gap:4px;align-items:center;flex-shrink:0">
+              <button class="btn btn-ghost copy-link-btn" data-link="${f.link}" title="Copy Link" style="padding:4px;display:flex;align-items:center;justify-content:center">${iconClipboard()}</button>
+            </div>`
+          : '';
 
       return `<div class="file-row" style="gap:10px">
         ${iconFileType(f.name)}
@@ -411,23 +418,38 @@ async function showContentsModal(id: string) {
 
 // ─── DPlayer Video Player ─────────────────────────────────────────
 
-let dplayerLoaded = false;
+let currentFolderPlayerPromise: Promise<void> | null = null;
 
 function loadDPlayer(): Promise<void> {
-  if (dplayerLoaded) return Promise.resolve();
+  return new Promise(async (resolve, reject) => {
+    // Clean up old script/style elements to force a fresh download every time
+    document.querySelectorAll('script[data-dplayer-script], link[data-dplayer-style]').forEach(el => el.remove());
 
-  return new Promise((resolve, reject) => {
-    // Load CSS
+    const timestamp = Date.now();
+    let ver = 'beta';
+    try {
+      const res = await fetch(`https://data.jsdelivr.com/v1/packages/npm/dplayer-enhanced?t=${timestamp}`, {
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.tags?.beta) ver = data.tags.beta;
+      }
+    } catch (_) {}
+
+    // Load CSS (forced un-cached with unique timestamp on every click)
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'https://cdn.jsdelivr.net/npm/dplayer-enhanced@beta/dist/DPlayer.min.css';
+    link.dataset.dplayerStyle = 'true';
+    link.href = `https://cdn.jsdelivr.net/npm/dplayer-enhanced@${ver}/dist/DPlayer.min.css?t=${timestamp}`;
     document.head.appendChild(link);
 
-    // Load JS
+    // Load JS (forced un-cached with unique timestamp on every click)
     const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/dplayer-enhanced@beta/dist/DPlayer.min.js';
-    script.onload = () => { dplayerLoaded = true; resolve(); };
-    script.onerror = () => reject(new Error('Failed to load DPlayer'));
+    script.dataset.dplayerScript = 'true';
+    script.src = `https://cdn.jsdelivr.net/npm/dplayer-enhanced@${ver}/dist/DPlayer.min.js?t=${timestamp}`;
+    script.onload = () => { resolve(); };
+    script.onerror = () => reject(new Error('Failed to load DPlayer from jsDelivr'));
     document.head.appendChild(script);
   });
 }
@@ -473,8 +495,7 @@ async function openVideoPlayer(url: string, name: string) {
       <div style="color:#ccc;font-size:13px;font-family:'Inter',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:calc(100% - 50px)" title="${name}">${name}</div>
       <button id="close-player" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:50%;width:34px;height:34px;cursor:pointer;color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;backdrop-filter:blur(8px);transition:background .2s" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">✕</button>
     </div>
-    <div id="dplayer-container" style="width:90vw;max-width:1200px;aspect-ratio:16/9;max-height:80vh;border-radius:8px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5)">
-      <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#888;font-size:14px;font-family:'Inter',sans-serif"><div class="spinner"></div>&nbsp;&nbsp;Loading player…</div>
+    <div id="dplayer-container" style="width:90vw;max-width:1200px;aspect-ratio:16/9;max-height:80vh;border-radius:8px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5);background:#000">
     </div>
   `;
 
@@ -513,7 +534,10 @@ async function openVideoPlayer(url: string, name: string) {
   });
 
   try {
-    await loadDPlayer();
+    if (!currentFolderPlayerPromise) {
+      currentFolderPlayerPromise = loadDPlayer();
+    }
+    await currentFolderPlayerPromise;
 
     const DPlayer = (window as any).DPlayer;
     if (!DPlayer) throw new Error('DPlayer not available');
