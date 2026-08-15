@@ -62,12 +62,27 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return res.json() as Promise<T>;
 }
 
+export interface ExtractedItem {
+  name: string;
+  link: string;
+  transferName: string;
+}
+
+export interface ExtractResult {
+  items: ExtractedItem[];
+  total: number;
+  errors?: string[];
+  formatted: string;
+}
+
 export const api = {
   health:           ()            => req<HealthInfo>("GET", "/health"),
   authCheck:        ()            => req<{ ok: boolean }>("GET", "/api/auth-check"),
   transfers:        ()            => req<TransfersData>("GET", "/api/transfers"),
   deleteTransfer:   (id: string)  => req<void>("DELETE", `/api/transfers/${id}`),
   transferContents: (id: string)  => req<{ files: any[] }>("GET", `/api/transfers/${id}/contents`),
+  extractLinks:     (transfers: Array<{ folder_id: string; name: string }>) =>
+                                     req<ExtractResult>("POST", "/api/extract", { transfers }),
 
   files:            ()            => req<FileEntry[]>("GET", "/files"),
   deleteFile:       (name: string) => req<void>("DELETE", `/files/${encodeURIComponent(name)}`),

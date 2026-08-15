@@ -473,6 +473,87 @@ export async function startWebServer(bot: any): Promise<void> {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
+  // ─── Extract Links (MagicLink Fetcher) ──────────────────────────────────────
+  // Mirrors the exact logic from Twel/magicnzb popup.js:
+  // 1. Takes selected transfers (with folder_id + name)
+  // 2. Fetches folder contents for each via POST /api/folder/list
+  // 3. Filters for .mp4/.mkv video files, excludes samples
+  // 4. Returns formatted Name + DirectLink pairs
+  app.post("/api/extract", async (req, res) => {
+    const { transfers: selectedTransfers } = req.body as {
+      transfers?: Array<{ folder_id: string; name: string }>;
+    };
+
+    if (!selectedTransfers || !Array.isArray(selectedTransfers) || selectedTransfers.length === 0) {
+      return res.status(400).json({ error: "No transfers selected" });
+    }
+
+    const client = new MagicClient(getMagicCookies());
+    const extractedItems: Array<{ name: string; link: string; transferName: string }> = [];
+    const errors: string[] = [];
+
+    for (const t of selectedTransfers) {
+      if (!t.folder_id) {
+        errors.push(`No folder_id for: ${t.name || "unknown"}`);
+        continue;
+      }
+
+      try {
+        const data = await client.getFolderContents(t.folder_id);
+        if (!data) {
+          errors.push(`Could not fetch contents for: ${t.name || t.folder_id}`);
+          continue;
+        }
+
+        // Extract files array from response (same structure handling as /api/transfers/:id/contents)
+        let files: any[] = [];
+        if (typeof data === "object") {
+          if ((data as any).files?.content) files = (data as any).files.content;
+          else if ((data as any).content) files = (data as any).content;
+          else if (Array.isArray((data as any).files)) files = (data as any).files;
+        }
+
+        // Filter: .mp4 and .mkv only, exclude samples — exact same logic as Twel popup.js
+        const mediaFiles = files.filter((f: any) =>
+          f.type === "file" &&
+          (f.name?.toLowerCase().endsWith(".mp4") || f.name?.toLowerCase().endsWith(".mkv")) &&
+          !f.name?.toLowerCase().includes("sample") &&
+          !(f.directlink ?? "").toLowerCase().includes("sample")
+        );
+
+        const baseName = (t.name || "").replace(/\.nzb$/i, "");
+
+        if (mediaFiles.length > 0) {
+          mediaFiles.forEach((f: any, i: number) => {
+            const ext = f.name?.toLowerCase().endsWith(".mkv") ? ".mkv" : ".mp4";
+            const outputName = baseName + (mediaFiles.length > 1 ? `_${i + 1}` : "") + ext;
+            extractedItems.push({
+              name: outputName,
+              link: f.directlink ?? f.link ?? f.url ?? "",
+              transferName: t.name || "",
+            });
+          });
+        } else {
+          errors.push(`No media files in: ${baseName}`);
+        }
+      } catch (e: any) {
+        errors.push(`Error processing ${t.name || t.folder_id}: ${e.message}`);
+      }
+    }
+
+    // Format as clipboard-ready text (same format as Twel: Name: "..." DirectLink: "...")
+    const formattedText = extractedItems
+      .map((item) => `Name: "${item.name}"\nDirectLink: "${item.link}"`)
+      .join("\n\n");
+
+    res.json({
+      items: extractedItems,
+      total: extractedItems.length,
+      errors: errors.length > 0 ? errors : undefined,
+      formatted: formattedText,
+    });
+  });
+
   // Logs API
   app.get("/api/logs", (req, res) => {
     const rawQuery = ((req.query.q as string) ?? "").trim();

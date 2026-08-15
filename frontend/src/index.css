@@ -334,6 +334,54 @@ select.input {
   cursor: pointer;
 }
 
+/* ─── Checkboxes ─────────────────────────────────────────────────── */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  vertical-align: middle;
+  transition: all var(--transition);
+  margin: 0;
+  padding: 0;
+  position: relative;
+  flex-shrink: 0;
+}
+
+input[type="checkbox"]:hover {
+  border-color: var(--fg-3);
+  background: var(--surface-2);
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--fg-3);
+  outline-offset: 1px;
+}
+
+input[type="checkbox"]:checked {
+  background: var(--surface-3);
+  border-color: var(--fg-2);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3.5 8.5L6.5 11.5L12.5 4.5' stroke='%23fafafa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-size: 11px 11px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+input[type="checkbox"]:indeterminate {
+  background: var(--surface-3);
+  border-color: var(--fg-2);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 8H12' stroke='%23fafafa' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-size: 11px 11px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
 /* ─── Search bar ─────────────────────────────────────────────────── */
 .search-wrap {
   position: relative;

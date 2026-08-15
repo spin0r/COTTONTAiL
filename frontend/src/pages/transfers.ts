@@ -1,6 +1,6 @@
 import { api } from '../api.ts';
 import type { Transfer, TransfersData } from '../api.ts';
-import { iconRefresh, iconTrash, iconEye, iconX, iconFolder, iconFile, iconActivity, iconFileType, iconSearch, iconPlay, iconClipboard } from '../icons.ts';
+import { iconRefresh, iconTrash, iconEye, iconX, iconFolder, iconFile, iconActivity, iconFileType, iconSearch, iconPlay, iconClipboard, iconZap, iconCheck } from '../icons.ts';
 import { fmtSize } from '../api.ts';
 
 let interval: ReturnType<typeof setInterval> | undefined;
@@ -30,6 +30,7 @@ export async function renderTransfers(container: HTMLElement) {
           <p class="page-subtitle">Manage your MagicNZB downloads</p>
         </div>
         <div class="page-actions">
+          <button class="btn btn-sm" id="extract-links-btn" title="Extract video links from finished transfers" style="display:flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;background:var(--surface-2);border:1px solid var(--border);color:var(--fg);border-radius:6px;cursor:pointer;transition:all .2s">${iconZap()} Extract</button>
           <label class="toggle">
             <input type="checkbox" id="auto-refresh-toggle" ${isAutoRefresh ? 'checked' : ''}>
             <div class="toggle-track"><div class="toggle-thumb"></div></div>
@@ -51,6 +52,7 @@ export async function renderTransfers(container: HTMLElement) {
           <table class="table">
             <thead>
               <tr>
+                <th style="width:32px;padding:8px 4px 8px 12px"><input type="checkbox" id="extract-select-all" title="Select all for extraction"></th>
                 <th>Name</th>
                 <th style="width:80px;white-space:nowrap">Status</th>
                 <th style="width:70px;white-space:nowrap">Actions</th>
@@ -113,6 +115,32 @@ function renderTabs() {
   if (tabBar) tabBar.innerHTML = html;
 }
 
+// Set of selected transfers: folder_id -> { folder_id, name }
+const selectedTransfersMap = new Map<string, { folder_id: string; name: string }>();
+
+function updateExtractBtnCount() {
+  if (!mainContainer) return;
+  const count = selectedTransfersMap.size;
+  const btn = mainContainer.querySelector('#extract-links-btn');
+  if (btn) {
+    btn.innerHTML = `${iconZap()} Extract${count > 0 ? ` (${count})` : ''}`;
+  }
+
+  // Update header select-all checkbox
+  const selectAllCb = mainContainer.querySelector('#extract-select-all') as HTMLInputElement | null;
+  if (selectAllCb) {
+    const visibleFinishedCbs = Array.from(mainContainer.querySelectorAll('.extract-row-cb')) as HTMLInputElement[];
+    if (visibleFinishedCbs.length === 0) {
+      selectAllCb.checked = false;
+      selectAllCb.indeterminate = false;
+    } else {
+      const checkedCount = visibleFinishedCbs.filter(cb => cb.checked).length;
+      selectAllCb.checked = checkedCount === visibleFinishedCbs.length;
+      selectAllCb.indeterminate = checkedCount > 0 && checkedCount < visibleFinishedCbs.length;
+    }
+  }
+}
+
 function renderTable() {
   if (!mainContainer) return;
   
@@ -161,6 +189,7 @@ function renderTable() {
         <p>No transfers found in this category.</p>
       </div>
     `;
+    updateExtractBtnCount();
     return;
   }
 
@@ -190,8 +219,11 @@ function renderTable() {
       ? `style="background: linear-gradient(to right, rgba(255,255,255,0.06) ${pct*100}%, transparent ${pct*100}%);"`
       : '';
 
+    const isChecked = t.folder_id && selectedTransfersMap.has(t.folder_id);
+
     return `
       <tr ${rowStyle}>
+        <td style="width:32px;padding:8px 4px 8px 12px">${t.status === 'finished' && t.folder_id ? `<input type="checkbox" class="extract-row-cb" data-folder-id="${t.folder_id}" data-name="${(t.name || '').replace(/"/g, '&quot;')}" ${isChecked ? 'checked' : ''}>` : ''}</td>
         <td>
           <div class="cell-name ${t.status === 'finished' ? 'cell-name-link' : ''}" title="${t.name || ''}" ${t.status === 'finished' ? `data-view-id="${t.id}"` : ''}>${t.name || 'Unknown'}</div>
           ${message}
@@ -206,6 +238,8 @@ function renderTable() {
       </tr>
     `;
   }).join('');
+
+  updateExtractBtnCount();
 }
 
 function attachEvents() {
@@ -226,6 +260,41 @@ function attachEvents() {
   searchInput?.addEventListener('input', () => {
     currentSearch = searchInput.value;
     renderTable();
+  });
+
+  mainContainer.querySelector('#extract-links-btn')?.addEventListener('click', () => {
+    extractFromCheckedRows();
+  });
+
+  // Select-all checkbox in table header
+  mainContainer.querySelector('#extract-select-all')?.addEventListener('change', (e) => {
+    const checked = (e.target as HTMLInputElement).checked;
+    mainContainer!.querySelectorAll('.extract-row-cb').forEach((cb) => {
+      const input = cb as HTMLInputElement;
+      input.checked = checked;
+      const fId = input.getAttribute('data-folder-id');
+      const fName = input.getAttribute('data-name') || '';
+      if (fId) {
+        if (checked) selectedTransfersMap.set(fId, { folder_id: fId, name: fName });
+        else selectedTransfersMap.delete(fId);
+      }
+    });
+    updateExtractBtnCount();
+  });
+
+  // Handle individual row checkbox clicks
+  mainContainer.addEventListener('change', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('extract-row-cb')) {
+      const input = target as HTMLInputElement;
+      const fId = input.getAttribute('data-folder-id');
+      const fName = input.getAttribute('data-name') || '';
+      if (fId) {
+        if (input.checked) selectedTransfersMap.set(fId, { folder_id: fId, name: fName });
+        else selectedTransfersMap.delete(fId);
+      }
+      updateExtractBtnCount();
+    }
   });
 
   mainContainer.addEventListener('click', async (e) => {
@@ -275,6 +344,110 @@ function attachEvents() {
       return;
     }
   });
+}
+
+// ─── Extract from Checked Rows ────────────────────────────────────────────────
+async function extractFromCheckedRows() {
+  const selected = Array.from(selectedTransfersMap.values());
+  if (selected.length === 0) {
+    (window as any).showToast('Please check at least one finished transfer on the left to extract', 'error');
+    return;
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal modal-wide" style="max-width:700px">
+      <div class="modal-header">
+        <div class="modal-title">Extracted Video Links</div>
+        <button class="modal-close" id="close-extract">${iconX()}</button>
+      </div>
+      <div class="modal-body" id="extract-content">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 0;gap:12px">
+          <div class="spinner"></div>
+          <div style="font-size:14px;color:var(--fg-2)">Extracting links from ${selected.length} transfer${selected.length > 1 ? 's' : ''}...</div>
+          <div style="font-size:12px;color:var(--fg-3)">Fetching direct streaming links from MagicNZB</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const closeModal = () => { modal.remove(); document.removeEventListener('keydown', escHandler); };
+  const escHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') closeModal(); };
+  document.addEventListener('keydown', escHandler);
+  modal.querySelector('#close-extract')?.addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+  const contentEl = modal.querySelector('#extract-content')!;
+
+  try {
+    const result = await api.extractLinks(selected);
+    const items = result.items || [];
+    const errors = result.errors || [];
+
+    if (items.length === 0 && errors.length === 0) {
+      contentEl.innerHTML = `<div style="text-align:center;padding:30px 0;color:var(--fg-3)">No video files (.mp4 / .mkv) found in selected transfers.</div>`;
+      return;
+    }
+
+    const itemsHtml = items.map((item, i) => `
+      <div class="file-row" style="gap:10px;padding:8px 12px;border-bottom:1px solid var(--border)">
+        <div style="width:22px;height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--fg-3);background:var(--surface-2);border-radius:var(--radius-sm)">${i + 1}</div>
+        <div style="flex:1;min-width:0;overflow:hidden">
+          <div style="font-size:13px;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.name}">${item.name}</div>
+          <div style="font-size:11px;color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">
+            <a href="${item.link}" target="_blank" style="color:var(--fg-2);text-decoration:underline" title="${item.link}">${item.link}</a>
+          </div>
+        </div>
+        <button class="btn btn-ghost extract-copy-one" data-link="${item.link}" title="Copy Link" style="padding:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${iconClipboard()}</button>
+      </div>
+    `).join('');
+
+    const errorsHtml = errors.length > 0 ? `
+      <div style="margin-top:12px;padding:10px 12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:var(--radius-sm)">
+        <div style="font-size:12px;font-weight:500;color:var(--error);margin-bottom:4px">${errors.length} issue${errors.length > 1 ? 's' : ''}</div>
+        ${errors.map(e => `<div style="font-size:11px;color:var(--fg-3);margin-top:2px">• ${e}</div>`).join('')}
+      </div>
+    ` : '';
+
+    contentEl.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:500;color:var(--fg)">${items.length} video link${items.length !== 1 ? 's' : ''} extracted</div>
+        <button class="btn btn-primary" id="extract-copy-all">${iconClipboard()} Copy All</button>
+      </div>
+      <div style="max-height:350px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)">
+        ${itemsHtml}
+      </div>
+      ${errorsHtml}
+    `;
+
+    // Copy all button
+    modal.querySelector('#extract-copy-all')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(result.formatted).then(() => {
+        const btn = modal.querySelector('#extract-copy-all')!;
+        btn.innerHTML = `${iconCheck()} Copied`;
+        setTimeout(() => {
+          btn.innerHTML = `${iconClipboard()} Copy All`;
+        }, 2000);
+        (window as any).showToast('All links copied to clipboard', 'success');
+      });
+    });
+
+    // Individual copy buttons
+    modal.querySelectorAll('.extract-copy-one').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const link = (btn as HTMLElement).getAttribute('data-link') || '';
+        navigator.clipboard.writeText(link).then(() => {
+          (window as any).showToast('Link copied', 'success');
+        });
+      });
+    });
+
+  } catch (err: any) {
+    contentEl.innerHTML = `<div style="color:var(--error);padding:30px 0;text-align:center">Failed to extract: ${err.message}</div>`;
+  }
 }
 
 async function showContentsModal(id: string) {
@@ -334,7 +507,7 @@ async function showContentsModal(id: string) {
 
       const actionHtml = vid && f.link
         ? `<div style="display:flex;gap:4px;align-items:center;flex-shrink:0">
-            <button class="btn btn-ghost play-video-btn" data-link="${f.link}" data-name="${f.name}" title="Play Video" style="padding:4px;display:flex;align-items:center;justify-content:center;color:#3b82f6">${iconPlay()}</button>
+            <button class="btn btn-ghost play-video-btn" data-link="${f.link}" data-name="${f.name}" title="Play Video" style="padding:4px;display:flex;align-items:center;justify-content:center;color:var(--fg)">${iconPlay()}</button>
             <button class="btn btn-ghost copy-link-btn" data-link="${f.link}" title="Copy Link" style="padding:4px;display:flex;align-items:center;justify-content:center">${iconClipboard()}</button>
           </div>`
         : f.link
@@ -553,7 +726,7 @@ async function openVideoPlayer(url: string, name: string) {
         type: 'auto',
       },
       autoplay: true,
-      theme: '#3b82f6',
+      theme: '#e4e4e7',
       loop: false,
       screenshot: true,
       hotkey: true,
