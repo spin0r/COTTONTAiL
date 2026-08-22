@@ -354,6 +354,8 @@ async function extractFromCheckedRows() {
     return;
   }
 
+  const total = selected.length;
+
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.innerHTML = `
@@ -363,10 +365,13 @@ async function extractFromCheckedRows() {
         <button class="modal-close" id="close-extract">${iconX()}</button>
       </div>
       <div class="modal-body" id="extract-content">
-        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 0;gap:12px">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 0;gap:16px">
           <div class="spinner"></div>
-          <div style="font-size:14px;color:var(--fg-2)">Extracting links from ${selected.length} transfer${selected.length > 1 ? 's' : ''}...</div>
-          <div style="font-size:12px;color:var(--fg-3)">Fetching direct streaming links from MagicNZB</div>
+          <div style="font-size:14px;color:var(--fg-2)" id="extract-progress-label">0 / ${total}</div>
+          <div style="width:240px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+            <div id="extract-progress-bar" style="height:100%;width:0%;background:var(--primary);border-radius:2px;transition:width .3s ease"></div>
+          </div>
+          <div style="font-size:12px;color:var(--fg-3)" id="extract-progress-name" style="max-width:300px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap">Fetching direct streaming links...</div>
         </div>
       </div>
     </div>
@@ -374,80 +379,117 @@ async function extractFromCheckedRows() {
 
   document.body.appendChild(modal);
 
-  const closeModal = () => { modal.remove(); document.removeEventListener('keydown', escHandler); };
+  let cancelled = false;
+  const closeModal = () => {
+    cancelled = true;
+    modal.remove();
+    document.removeEventListener('keydown', escHandler);
+  };
   const escHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') closeModal(); };
   document.addEventListener('keydown', escHandler);
   modal.querySelector('#close-extract')?.addEventListener('click', closeModal);
   modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
   const contentEl = modal.querySelector('#extract-content')!;
+  const progressLabel = modal.querySelector('#extract-progress-label')!;
+  const progressBar = modal.querySelector('#extract-progress-bar') as HTMLElement;
+  const progressName = modal.querySelector('#extract-progress-name')!;
 
-  try {
-    const result = await api.extractLinks(selected);
-    const items = result.items || [];
-    const errors = result.errors || [];
+  // ── Process each transfer individually so we can show live N/total ──
+  const extractedItems: Array<{ name: string; link: string; transferName: string }> = [];
+  const errors: string[] = [];
 
-    if (items.length === 0 && errors.length === 0) {
-      contentEl.innerHTML = `<div style="text-align:center;padding:30px 0;color:var(--fg-3)">No video files (.mp4 / .mkv) found in selected transfers.</div>`;
-      return;
+  for (let i = 0; i < selected.length; i++) {
+    if (cancelled) return;
+
+    const transfer = selected[i];
+    const pct = Math.round((i / total) * 100);
+    progressLabel.textContent = `${i} / ${total}`;
+    progressBar.style.width = `${pct}%`;
+    progressName.textContent = transfer.name || transfer.folder_id;
+
+    try {
+      // Use the existing transferContents endpoint which accepts transfer id.
+      // The folder_id stored in the map IS the transfer id (same as what /view uses).
+      const res = await api.transferContents(transfer.folder_id);
+      const files: any[] = res.files || [];
+
+      for (const f of files) {
+        const name: string = (f.name || '').trim();
+        const link: string = f.directlink || f.link || f.url || '';
+        if (!name.match(/\.(mp4|mkv)$/i)) continue;
+        if (/sample/i.test(name)) continue;
+        if (/sample/i.test(link)) continue;
+        extractedItems.push({ name, link, transferName: transfer.name || '' });
+      }
+    } catch (err: any) {
+      errors.push(`${transfer.name || transfer.folder_id}: ${err.message}`);
     }
-
-    const itemsHtml = items.map((item, i) => `
-      <div class="file-row" style="gap:10px;padding:8px 12px;border-bottom:1px solid var(--border)">
-        <div style="width:22px;height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--fg-3);background:var(--surface-2);border-radius:var(--radius-sm)">${i + 1}</div>
-        <div style="flex:1;min-width:0;overflow:hidden">
-          <div style="font-size:13px;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.name}">${item.name}</div>
-          <div style="font-size:11px;color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">
-            <a href="${item.link}" target="_blank" style="color:var(--fg-2);text-decoration:underline" title="${item.link}">${item.link}</a>
-          </div>
-        </div>
-        <button class="btn btn-ghost extract-copy-one" data-link="${item.link}" title="Copy Link" style="padding:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${iconClipboard()}</button>
-      </div>
-    `).join('');
-
-    const errorsHtml = errors.length > 0 ? `
-      <div style="margin-top:12px;padding:10px 12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:var(--radius-sm)">
-        <div style="font-size:12px;font-weight:500;color:var(--error);margin-bottom:4px">${errors.length} issue${errors.length > 1 ? 's' : ''}</div>
-        ${errors.map(e => `<div style="font-size:11px;color:var(--fg-3);margin-top:2px">• ${e}</div>`).join('')}
-      </div>
-    ` : '';
-
-    contentEl.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="font-size:13px;font-weight:500;color:var(--fg)">${items.length} video link${items.length !== 1 ? 's' : ''} extracted</div>
-        <button class="btn btn-primary" id="extract-copy-all">${iconClipboard()} Copy All</button>
-      </div>
-      <div style="max-height:350px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)">
-        ${itemsHtml}
-      </div>
-      ${errorsHtml}
-    `;
-
-    // Copy all button
-    modal.querySelector('#extract-copy-all')?.addEventListener('click', () => {
-      navigator.clipboard.writeText(result.formatted).then(() => {
-        const btn = modal.querySelector('#extract-copy-all')!;
-        btn.innerHTML = `${iconCheck()} Copied`;
-        setTimeout(() => {
-          btn.innerHTML = `${iconClipboard()} Copy All`;
-        }, 2000);
-        (window as any).showToast('All links copied to clipboard', 'success');
-      });
-    });
-
-    // Individual copy buttons
-    modal.querySelectorAll('.extract-copy-one').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const link = (btn as HTMLElement).getAttribute('data-link') || '';
-        navigator.clipboard.writeText(link).then(() => {
-          (window as any).showToast('Link copied', 'success');
-        });
-      });
-    });
-
-  } catch (err: any) {
-    contentEl.innerHTML = `<div style="color:var(--error);padding:30px 0;text-align:center">Failed to extract: ${err.message}</div>`;
   }
+
+  if (cancelled) return;
+
+  // Final progress = 100%
+  progressLabel.textContent = `${total} / ${total}`;
+  progressBar.style.width = '100%';
+
+  if (extractedItems.length === 0 && errors.length === 0) {
+    contentEl.innerHTML = `<div style="text-align:center;padding:30px 0;color:var(--fg-3)">No video files (.mp4 / .mkv) found in selected transfers.</div>`;
+    return;
+  }
+
+  const formatted = extractedItems.map(item => `${item.name}\n${item.link}`).join('\n\n');
+
+  const itemsHtml = extractedItems.map((item, i) => `
+    <div class="file-row" style="gap:10px;padding:8px 12px;border-bottom:1px solid var(--border)">
+      <div style="width:22px;height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--fg-3);background:var(--surface-2);border-radius:var(--radius-sm)">${i + 1}</div>
+      <div style="flex:1;min-width:0;overflow:hidden">
+        <div style="font-size:13px;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.name}">${item.name}</div>
+        <div style="font-size:11px;color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">
+          <a href="${item.link}" target="_blank" style="color:var(--fg-2);text-decoration:underline" title="${item.link}">${item.link}</a>
+        </div>
+      </div>
+      <button class="btn btn-ghost extract-copy-one" data-link="${item.link}" title="Copy Link" style="padding:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${iconClipboard()}</button>
+    </div>
+  `).join('');
+
+  const errorsHtml = errors.length > 0 ? `
+    <div style="margin-top:12px;padding:10px 12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:var(--radius-sm)">
+      <div style="font-size:12px;font-weight:500;color:var(--error);margin-bottom:4px">${errors.length} issue${errors.length > 1 ? 's' : ''}</div>
+      ${errors.map(e => `<div style="font-size:11px;color:var(--fg-3);margin-top:2px">• ${e}</div>`).join('')}
+    </div>
+  ` : '';
+
+  contentEl.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500;color:var(--fg)">${extractedItems.length} video link${extractedItems.length !== 1 ? 's' : ''} extracted from ${total} transfer${total !== 1 ? 's' : ''}</div>
+      <button class="btn btn-primary" id="extract-copy-all">${iconClipboard()} Copy All</button>
+    </div>
+    <div style="max-height:350px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)">
+      ${itemsHtml}
+    </div>
+    ${errorsHtml}
+  `;
+
+  // Copy all button
+  modal.querySelector('#extract-copy-all')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(formatted).then(() => {
+      const btn = modal.querySelector('#extract-copy-all')!;
+      btn.innerHTML = `${iconCheck()} Copied`;
+      setTimeout(() => { btn.innerHTML = `${iconClipboard()} Copy All`; }, 2000);
+      (window as any).showToast('All links copied to clipboard', 'success');
+    });
+  });
+
+  // Individual copy buttons
+  modal.querySelectorAll('.extract-copy-one').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const link = (btn as HTMLElement).getAttribute('data-link') || '';
+      navigator.clipboard.writeText(link).then(() => {
+        (window as any).showToast('Link copied', 'success');
+      });
+    });
+  });
 }
 
 async function showContentsModal(id: string) {
