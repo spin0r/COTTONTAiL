@@ -367,7 +367,7 @@ async function extractFromCheckedRows() {
       <div class="modal-body" id="extract-content">
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 0;gap:16px">
           <div class="spinner"></div>
-          <div style="font-size:14px;color:var(--fg-2)" id="extract-progress-label">0 / ${total}</div>
+          <div style="font-size:14px;color:var(--fg-2)" id="extract-progress-label">1 / ${total}</div>
           <div style="width:240px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
             <div id="extract-progress-bar" style="height:100%;width:0%;background:var(--primary);border-radius:2px;transition:width .3s ease"></div>
           </div>
@@ -404,23 +404,20 @@ async function extractFromCheckedRows() {
 
     const transfer = selected[i];
     const pct = Math.round((i / total) * 100);
-    progressLabel.textContent = `${i} / ${total}`;
+    progressLabel.textContent = `${i + 1} / ${total}`;
     progressBar.style.width = `${pct}%`;
     progressName.textContent = transfer.name || transfer.folder_id;
 
     try {
-      // Use the existing transferContents endpoint which accepts transfer id.
-      // The folder_id stored in the map IS the transfer id (same as what /view uses).
       const res = await api.transferContents(transfer.folder_id);
       const files: any[] = res.files || [];
 
       for (const f of files) {
-        const name: string = (f.name || '').trim();
+        const fname: string = (f.name || '').trim();
         const link: string = f.directlink || f.link || f.url || '';
-        if (!name.match(/\.(mp4|mkv)$/i)) continue;
-        if (/sample/i.test(name)) continue;
-        if (/sample/i.test(link)) continue;
-        extractedItems.push({ name, link, transferName: transfer.name || '' });
+        if (!fname.match(/\.(mp4|mkv)$/i)) continue;
+        if (/sample/i.test(fname) || /sample/i.test(link)) continue;
+        extractedItems.push({ name: transfer.name || fname, link, transferName: transfer.name || '' });
       }
     } catch (err: any) {
       errors.push(`${transfer.name || transfer.folder_id}: ${err.message}`);
@@ -438,15 +435,17 @@ async function extractFromCheckedRows() {
     return;
   }
 
-  const formatted = extractedItems.map(item => `${item.name}\n${item.link}`).join('\n\n');
+  const formatted = extractedItems.map(item => `Name: "${item.name}"\nDirectLink: "${item.link}"`).join('\n\n');
 
   const itemsHtml = extractedItems.map((item, i) => `
-    <div class="file-row" style="gap:10px;padding:8px 12px;border-bottom:1px solid var(--border)">
-      <div style="width:22px;height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--fg-3);background:var(--surface-2);border-radius:var(--radius-sm)">${i + 1}</div>
-      <div style="flex:1;min-width:0;overflow:hidden">
-        <div style="font-size:13px;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.name}">${item.name}</div>
-        <div style="font-size:11px;color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">
-          <a href="${item.link}" target="_blank" style="color:var(--fg-2);text-decoration:underline" title="${item.link}">${item.link}</a>
+    <div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px">
+      <div style="width:22px;height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--fg-3);background:var(--surface-2);border-radius:var(--radius-sm);margin-top:1px">${i + 1}</div>
+      <div style="flex:1;min-width:0;overflow:hidden;font-size:12px;line-height:1.6">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          <span style="color:var(--fg-3)">Name: </span><span style="color:var(--fg)" title="${item.name}">"${item.name}"</span>
+        </div>
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">
+          <span style="color:var(--fg-3)">DirectLink: </span><a href="${item.link}" target="_blank" style="color:var(--fg-2);text-decoration:underline" title="${item.link}">"${item.link}"</a>
         </div>
       </div>
       <button class="btn btn-ghost extract-copy-one" data-link="${item.link}" title="Copy Link" style="padding:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${iconClipboard()}</button>
@@ -462,7 +461,7 @@ async function extractFromCheckedRows() {
 
   contentEl.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:500;color:var(--fg)">${extractedItems.length} video link${extractedItems.length !== 1 ? 's' : ''} extracted from ${total} transfer${total !== 1 ? 's' : ''}</div>
+      <div style="font-size:13px;font-weight:500;color:var(--fg)">${extractedItems.length} link${extractedItems.length !== 1 ? 's' : ''} from ${total} transfer${total !== 1 ? 's' : ''}</div>
       <button class="btn btn-primary" id="extract-copy-all">${iconClipboard()} Copy All</button>
     </div>
     <div style="max-height:350px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)">
