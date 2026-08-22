@@ -417,7 +417,7 @@ async function extractFromCheckedRows() {
         const link: string = f.directlink || f.link || f.url || '';
         if (!fname.match(/\.(mp4|mkv)$/i)) continue;
         if (/sample/i.test(fname) || /sample/i.test(link)) continue;
-        extractedItems.push({ name: transfer.name || fname, link, transferName: transfer.name || '' });
+        extractedItems.push({ name: (transfer.name || fname).replace(/\.nzb$/i, '.mp4'), link, transferName: transfer.name || '' });
       }
     } catch (err: any) {
       errors.push(`${transfer.name || transfer.folder_id}: ${err.message}`);
