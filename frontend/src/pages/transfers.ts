@@ -30,6 +30,7 @@ export async function renderTransfers(container: HTMLElement) {
           <p class="page-subtitle">Manage your MagicNZB downloads</p>
         </div>
         <div class="page-actions">
+          <button class="btn btn-sm" id="delete-selected-btn" title="Delete selected transfers" style="display:none;align-items:center;gap:6px;font-size:12px;padding:6px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:6px;cursor:pointer;transition:all .2s">${iconTrash()} Delete</button>
           <button class="btn btn-sm" id="extract-links-btn" title="Extract video links from finished transfers" style="display:flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;background:var(--surface-2);border:1px solid var(--border);color:var(--fg);border-radius:6px;cursor:pointer;transition:all .2s">${iconZap()} Extract</button>
           <label class="toggle">
             <input type="checkbox" id="auto-refresh-toggle" ${isAutoRefresh ? 'checked' : ''}>
@@ -52,7 +53,7 @@ export async function renderTransfers(container: HTMLElement) {
           <table class="table">
             <thead>
               <tr>
-                <th style="width:32px;padding:8px 4px 8px 12px"><input type="checkbox" id="extract-select-all" title="Select all for extraction"></th>
+                <th style="width:32px;padding:8px 4px 8px 12px"><input type="checkbox" id="extract-select-all" title="Select all"></th>
                 <th>Name</th>
                 <th style="width:80px;white-space:nowrap">Status</th>
                 <th style="width:70px;white-space:nowrap">Actions</th>
@@ -115,28 +116,35 @@ function renderTabs() {
   if (tabBar) tabBar.innerHTML = html;
 }
 
-// Set of selected transfers: folder_id -> { folder_id, name }
-const selectedTransfersMap = new Map<string, { folder_id: string; name: string }>();
+// Set of selected transfers: id -> { id, folder_id, name }
+const selectedTransfersMap = new Map<string, { id: string; folder_id: string; name: string }>();
 
 function updateExtractBtnCount() {
   if (!mainContainer) return;
   const count = selectedTransfersMap.size;
-  const btn = mainContainer.querySelector('#extract-links-btn');
-  if (btn) {
-    btn.innerHTML = `${iconZap()} Extract${count > 0 ? ` (${count})` : ''}`;
+  const extractBtn = mainContainer.querySelector('#extract-links-btn');
+  if (extractBtn) {
+    extractBtn.innerHTML = `${iconZap()} Extract${count > 0 ? ` (${count})` : ''}`;
+  }
+
+  // Delete selected button — show only when something is selected (like extract count)
+  const deleteBtn = mainContainer.querySelector('#delete-selected-btn') as HTMLElement | null;
+  if (deleteBtn) {
+    deleteBtn.style.display = count > 0 ? 'flex' : 'none';
+    deleteBtn.innerHTML = `${iconTrash()} Delete${count > 0 ? ` (${count})` : ''}`;
   }
 
   // Update header select-all checkbox
   const selectAllCb = mainContainer.querySelector('#extract-select-all') as HTMLInputElement | null;
   if (selectAllCb) {
-    const visibleFinishedCbs = Array.from(mainContainer.querySelectorAll('.extract-row-cb')) as HTMLInputElement[];
-    if (visibleFinishedCbs.length === 0) {
+    const visibleCbs = Array.from(mainContainer.querySelectorAll('.extract-row-cb')) as HTMLInputElement[];
+    if (visibleCbs.length === 0) {
       selectAllCb.checked = false;
       selectAllCb.indeterminate = false;
     } else {
-      const checkedCount = visibleFinishedCbs.filter(cb => cb.checked).length;
-      selectAllCb.checked = checkedCount === visibleFinishedCbs.length;
-      selectAllCb.indeterminate = checkedCount > 0 && checkedCount < visibleFinishedCbs.length;
+      const checkedCount = visibleCbs.filter(cb => cb.checked).length;
+      selectAllCb.checked = checkedCount === visibleCbs.length;
+      selectAllCb.indeterminate = checkedCount > 0 && checkedCount < visibleCbs.length;
     }
   }
 }
@@ -219,11 +227,12 @@ function renderTable() {
       ? `style="background: linear-gradient(to right, rgba(255,255,255,0.06) ${pct*100}%, transparent ${pct*100}%);"`
       : '';
 
-    const isChecked = t.folder_id && selectedTransfersMap.has(t.folder_id);
+    const idKey = t.id || t.folder_id || '';
+    const isChecked = idKey && selectedTransfersMap.has(idKey);
 
     return `
       <tr ${rowStyle}>
-        <td style="width:32px;padding:8px 4px 8px 12px">${t.status === 'finished' && t.folder_id ? `<input type="checkbox" class="extract-row-cb" data-folder-id="${t.folder_id}" data-name="${(t.name || '').replace(/"/g, '&quot;')}" ${isChecked ? 'checked' : ''}>` : ''}</td>
+        <td style="width:32px;padding:8px 4px 8px 12px">${idKey ? `<input type="checkbox" class="extract-row-cb" data-id="${idKey}" data-folder-id="${t.folder_id || idKey}" data-name="${(t.name || '').replace(/"/g, '&quot;')}" ${isChecked ? 'checked' : ''}>` : ''}</td>
         <td>
           <div class="cell-name ${t.status === 'finished' ? 'cell-name-link' : ''}" title="${t.name || ''}" ${t.status === 'finished' ? `data-view-id="${t.id}"` : ''}>${t.name || 'Unknown'}</div>
           ${message}
@@ -266,17 +275,22 @@ function attachEvents() {
     extractFromCheckedRows();
   });
 
+  mainContainer.querySelector('#delete-selected-btn')?.addEventListener('click', () => {
+    deleteSelectedTransfers();
+  });
+
   // Select-all checkbox in table header
   mainContainer.querySelector('#extract-select-all')?.addEventListener('change', (e) => {
     const checked = (e.target as HTMLInputElement).checked;
     mainContainer!.querySelectorAll('.extract-row-cb').forEach((cb) => {
       const input = cb as HTMLInputElement;
       input.checked = checked;
-      const fId = input.getAttribute('data-folder-id');
+      const id = input.getAttribute('data-id') || input.getAttribute('data-folder-id') || '';
+      const fId = input.getAttribute('data-folder-id') || id;
       const fName = input.getAttribute('data-name') || '';
-      if (fId) {
-        if (checked) selectedTransfersMap.set(fId, { folder_id: fId, name: fName });
-        else selectedTransfersMap.delete(fId);
+      if (id) {
+        if (checked) selectedTransfersMap.set(id, { id, folder_id: fId, name: fName });
+        else selectedTransfersMap.delete(id);
       }
     });
     updateExtractBtnCount();
@@ -287,11 +301,12 @@ function attachEvents() {
     const target = e.target as HTMLElement;
     if (target.classList.contains('extract-row-cb')) {
       const input = target as HTMLInputElement;
-      const fId = input.getAttribute('data-folder-id');
+      const id = input.getAttribute('data-id') || input.getAttribute('data-folder-id') || '';
+      const fId = input.getAttribute('data-folder-id') || id;
       const fName = input.getAttribute('data-name') || '';
-      if (fId) {
-        if (input.checked) selectedTransfersMap.set(fId, { folder_id: fId, name: fName });
-        else selectedTransfersMap.delete(fId);
+      if (id) {
+        if (input.checked) selectedTransfersMap.set(id, { id, folder_id: fId, name: fName });
+        else selectedTransfersMap.delete(id);
       }
       updateExtractBtnCount();
     }
@@ -317,6 +332,8 @@ function attachEvents() {
       if (confirm('Delete this transfer?')) {
         try {
           await api.deleteTransfer(id);
+          selectedTransfersMap.delete(id);
+          updateExtractBtnCount();
           (window as any).showToast('Transfer deleted', 'success');
           loadData();
         } catch (err: any) {
@@ -344,6 +361,49 @@ function attachEvents() {
       return;
     }
   });
+}
+
+// ─── Delete Selected Transfers (like Extract — bulk delete) ───────────────────
+async function deleteSelectedTransfers() {
+  const selected = Array.from(selectedTransfersMap.values());
+  if (selected.length === 0) {
+    (window as any).showToast('Please select at least one transfer to delete', 'error');
+    return;
+  }
+
+  const count = selected.length;
+  if (!confirm(`Delete ${count} selected transfer${count > 1 ? 's' : ''}? This cannot be undone.`)) return;
+
+  const deleteBtn = mainContainer?.querySelector('#delete-selected-btn') as HTMLButtonElement | null;
+  if (deleteBtn) { deleteBtn.disabled = true; deleteBtn.style.opacity = '0.6'; }
+
+  let success = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < selected.length; i++) {
+    const t = selected[i];
+    if (deleteBtn) deleteBtn.innerHTML = `${iconTrash()} Deleting ${i + 1}/${count}...`;
+    try {
+      await api.deleteTransfer(t.id);
+      selectedTransfersMap.delete(t.id);
+      success++;
+    } catch (err: any) {
+      failed++;
+      errors.push(`${t.name || t.id}: ${err.message}`);
+    }
+  }
+
+  if (deleteBtn) { deleteBtn.disabled = false; deleteBtn.style.opacity = ''; }
+
+  if (success > 0) {
+    (window as any).showToast(`Deleted ${success}/${count} transfer${count !== 1 ? 's' : ''}${failed ? `, ${failed} failed` : ''}`, failed ? 'error' : 'success');
+  } else {
+    (window as any).showToast(`Failed to delete: ${errors[0] || 'unknown error'}`, 'error');
+  }
+
+  updateExtractBtnCount();
+  await loadData();
 }
 
 // ─── Extract from Checked Rows ────────────────────────────────────────────────
