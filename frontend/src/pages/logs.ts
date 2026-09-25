@@ -543,6 +543,36 @@ function attachEvents() {
     }
   });
 
+  // auto: space → . while typing/pasting in the rename box (same as DrunkenSlug inline box)
+  mainContainer.addEventListener('input', (e) => {
+    const target = e.target as HTMLElement;
+    if (!target.classList.contains('inline-rename')) return;
+    const input = target as HTMLInputElement;
+    if (!input.value.includes(' ')) return;
+    const s = input.selectionStart ?? input.value.length;
+    const next = input.value.replace(/ /g, '.');
+    if (next !== input.value) {
+      input.value = next;
+      try { input.setSelectionRange(s, s); } catch {}
+    }
+  });
+
+  // explicit paste: dotify clipboard text before it lands, so pasted spaces never appear
+  mainContainer.addEventListener('paste', (e) => {
+    const target = e.target as HTMLElement;
+    if (!target.classList.contains('inline-rename')) return;
+    const input = target as HTMLInputElement;
+    const clip = e.clipboardData?.getData('text') ?? '';
+    if (!clip) return;
+    e.preventDefault();
+    const dotified = clip.replace(/ /g, '.');
+    const s = input.selectionStart ?? input.value.length;
+    const en = input.selectionEnd ?? s;
+    input.value = input.value.slice(0, s) + dotified + input.value.slice(en);
+    const ns = s + dotified.length;
+    try { input.setSelectionRange(ns, ns); } catch {}
+  });
+
   mainContainer.addEventListener('keydown', async (e) => {
     const target = e.target as HTMLElement;
     if (target.classList.contains('inline-rename')) {
