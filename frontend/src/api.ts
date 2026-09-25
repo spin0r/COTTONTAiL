@@ -96,6 +96,7 @@ export const api = {
   grabNzb:          (id: number)  => req<{ status: string }>("POST", `/api/grab/${id}`),
   renameLog:        (id: number, newName: string) => req("PUT", `/api/logs/${id}/rename`, { new_name: newName }),
   aiRenameLog:      (id: number)  => req<{ new_name: string }>("POST", `/api/logs/${id}/ai-rename`),
+  stripLog:         (id: number)  => req<{ new_name: string }>("POST", `/api/logs/${id}/strip`),
   deleteLog:        (id: number)  => req<{ success: boolean; telegram_deleted: boolean; db_deleted: boolean; telegram_error?: string }>("DELETE", `/api/logs/${id}`),
   logThumbnailUrl:       (id: number)  => `/api/logs/${id}/thumbnail`,
   logCustomThumbnailUrl: (id: number)  => `/api/logs/${id}/sample`,

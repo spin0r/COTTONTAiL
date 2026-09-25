@@ -13,6 +13,7 @@ import {
 } from "./helpers";
 import * as nzbDb from "../nzb/db";
 import { extractKeywords } from "../nzb/utils";
+import { stripTrailingQualityTags } from "./stripQualityTags";
 import { markDirty } from "../nzb/backup";
 import { clearSearchCache } from "../handlers/nzb";
 import { userbotDeleteMessage, isUserbotConfigured } from "./userbot";
@@ -669,6 +670,41 @@ export async function startWebServer(bot: any): Promise<void> {
       if (_bot && LOG_GROUP_ID && msgId > 0) {
         try { await _bot.api.editMessageCaption(LOG_GROUP_ID, msgId, { caption: `<code>${newName}</code>`, parse_mode: "HTML" }); telegramOk = true; }
         catch (e: any) { log.error("NZB", `AI rename caption update failed (msg_id=${msgId}) — ${e.message}`); }
+      }
+
+      res.json({ success: true, old_name: currentName, new_name: newName, telegram_updated: telegramOk });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Native strip: removes trailing quality/SEO tags (XXX, 1080p, MP4-WRB, ...) locally — no AI call
+  app.post("/api/logs/:msg_id/strip", async (req, res) => {
+    const msgId = parseInt(req.params.msg_id, 10);
+    if (isNaN(msgId)) return res.status(400).json({ error: "Invalid message ID" });
+
+    try {
+      const record = nzbDb.getByMsgId(msgId);
+      if (!record) return res.status(404).json({ error: "Log entry not found" });
+
+      const currentName = (record.caption?.trim()) || record.file_name || "";
+      if (!currentName) return res.status(400).json({ error: "No filename found for this entry" });
+
+      const inputName = currentName.replace(/\.nzb$/i, "");
+      const stripped = stripTrailingQualityTags(inputName);
+      if (!stripped || stripped === inputName) {
+        return res.status(400).json({ error: "No trailing tags to strip" });
+      }
+
+      const newName = stripped + ".nzb";
+
+      nzbDb.updateFile(msgId, newName, extractKeywords(newName, newName));
+      markDirty();
+      try { clearSearchCache(); } catch (_) {}
+      _thumbCache.delete(msgId); // bust thumbnail cache so new caption is used
+
+      let telegramOk = false;
+      if (_bot && LOG_GROUP_ID && msgId > 0) {
+        try { await _bot.api.editMessageCaption(LOG_GROUP_ID, msgId, { caption: `<code>${newName}</code>`, parse_mode: "HTML" }); telegramOk = true; }
+        catch (e: any) { log.error("NZB", `Strip caption update failed (msg_id=${msgId}) — ${e.message}`); }
       }
 
       res.json({ success: true, old_name: currentName, new_name: newName, telegram_updated: telegramOk });

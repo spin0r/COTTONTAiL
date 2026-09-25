@@ -1,6 +1,6 @@
 import { api } from '../api.ts';
 import type { LogEntry } from '../api.ts';
-import { iconSearch, iconDownload, iconEdit, iconSparkle, iconTrash, iconCheck, iconX, iconClipboard, iconImage, iconTelegram } from '../icons.ts';
+import { iconSearch, iconDownload, iconEdit, iconSparkle, iconScissors, iconTrash, iconCheck, iconX, iconClipboard, iconImage, iconTelegram } from '../icons.ts';
 import { fmtDate } from '../api.ts';
 
 let mainContainer: HTMLElement | null = null;
@@ -150,6 +150,7 @@ function renderTable(logs: LogEntry[], total: number) {
             <button class="btn-icon btn-grab" title="Grab to MagicNZB">${iconDownload()}</button>
             <button class="btn-icon btn-rename" title="Rename">${iconEdit()}</button>
             <button class="btn-icon btn-ai-rename" title="AI Smart Rename">${iconSparkle()}</button>
+            <button class="btn-icon btn-strip" title="Strip quality tags">${iconScissors()}</button>
             <button class="btn-icon btn-backfill" title="Set Sample Image" style="${l.has_custom_thumbnail ? 'color:var(--success)' : ''}">${iconImage()}</button>
             <button class="btn-icon btn-delete" title="Delete">${iconTrash()}</button>
           </div>
@@ -437,6 +438,20 @@ function attachEvents() {
         const renameInput = tr.querySelector('.inline-rename') as HTMLInputElement;
         if (renameInput) renameInput.value = res.new_name.replace(/\.nzb$/i, '');
         (window as any).showToast(`Renamed to: ${res.new_name}`, 'success');
+      });
+      return;
+    }
+
+    if (target.closest('.btn-strip')) {
+      const btn = target.closest('.btn-strip') as HTMLButtonElement;
+      await performAiAction(btn, async () => {
+        const res = await api.stripLog(id);
+        // Update name in-place without reloading the full list
+        const nameSpan = tr.querySelector('.log-name-link') as HTMLElement;
+        if (nameSpan) nameSpan.textContent = res.new_name;
+        const renameInput = tr.querySelector('.inline-rename') as HTMLInputElement;
+        if (renameInput) renameInput.value = res.new_name.replace(/\.nzb$/i, '');
+        (window as any).showToast(`Stripped to: ${res.new_name}`, 'success');
       });
       return;
     }
