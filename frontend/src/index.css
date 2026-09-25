@@ -478,8 +478,18 @@ input[type="checkbox"]:indeterminate {
   color: var(--fg-2);
 }
 .table tr:last-child td { border-bottom: none; }
-.table tbody tr { transition: background var(--transition); }
-.table tbody tr:hover { background: var(--surface); }
+.table tbody tr { transition: background var(--transition), box-shadow var(--transition); position: relative; }
+.table tbody tr:hover,
+.table tbody tr:focus-within {
+  background: var(--surface-2);
+  box-shadow: inset 2px 0 0 var(--success);
+}
+/* hovered cell stands out from the rest of the row */
+.table tbody tr:hover td:hover { background: rgba(255,255,255,0.04); }
+.table tbody tr:hover .cell-name { color: #fff; }
+.table tbody tr:hover .cell-actions { opacity: 1; }
+.table .cell-actions { opacity: 0.55; transition: opacity var(--transition); }
+.table tbody tr:hover .btn-icon { color: var(--fg); }
 .table .cell-name {
   color: var(--fg);
   font-weight: 500;
